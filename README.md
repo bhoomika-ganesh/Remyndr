@@ -3,7 +3,7 @@
 **Every Notice. On Time.**
 
 🌐 **Live Project**  
-Add your GitHub Pages URL here after deployment.
+ https://bhoomika-ganesh.github.io/Remyndr/
 
 ---
 
