@@ -1,0 +1,3782 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Remyndr — Every Notice. One Smart Action.</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f6ff',
+              100: '#e0edff',
+              500: '#2563eb',
+              600: '#1d4ed8',
+              700: '#1e40af',
+              800: '#1e3a8a',
+            }
+          },
+          animation: {
+            'spin-slow': 'spin 12s linear infinite',
+            'float-slow': 'float 18s ease-in-out infinite',
+            'float-medium': 'float 12s ease-in-out infinite',
+            'pulse-subtle': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+          },
+          keyframes: {
+            float: {
+              '0%, 100%': { transform: 'translateY(0px) rotate(0deg)' },
+              '50%': { transform: 'translateY(-18px) rotate(5deg)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- PDF.js CDN for client-side PDF text extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
+
+  <!-- Tesseract.js CDN for client-side OCR on scanned documents & images -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* Glassmorphism Styles */
+    .glass-card {
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+    .dark .glass-card {
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+
+    /* Floating Keyframe Animations for Background Stationery */
+    @keyframes float1 {
+      0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
+      33% { transform: translateY(-22px) translateX(12px) rotate(6deg); }
+      66% { transform: translateY(12px) translateX(-8px) rotate(-5deg); }
+    }
+    @keyframes float2 {
+      0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
+      50% { transform: translateY(-28px) translateX(-16px) rotate(-10deg); }
+    }
+    @keyframes float3 {
+      0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
+      50% { transform: translateY(24px) translateX(18px) rotate(12deg); }
+    }
+
+    .anim-float-1 { animation: float1 20s ease-in-out infinite; }
+    .anim-float-2 { animation: float2 26s ease-in-out infinite; }
+    .anim-float-3 { animation: float3 18s ease-in-out infinite; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .anim-float-1, .anim-float-2, .anim-float-3 { animation: none !important; }
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.5); border-radius: 9999px; }
+    .dark ::-webkit-scrollbar-thumb { background: rgba(71, 85, 105, 0.5); }
+  </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen relative transition-colors duration-200">
+
+  <!-- 1. GLOBAL FLOATING STATIONERY BACKGROUND -->
+  <div id="stationeryBackground" class="fixed inset-0 pointer-events-none z-0 overflow-hidden opacity-30 dark:opacity-20 select-none"></div>
+
+  <!-- 2. APPLICATION SHELL & LAYOUT WRAPPER -->
+  <div id="appShell" class="relative z-10 flex flex-col min-h-screen">
+
+    <!-- TOP HEADER (HIDDEN WHEN UNAUTHENTICATED) -->
+    <header id="mainHeader" class="sticky top-0 z-30 border-b border-slate-200/80 dark:border-slate-800/80 bg-white/85 dark:bg-slate-900/85 backdrop-blur-md px-4 lg:px-8 py-3 flex items-center justify-between hidden">
+      <div class="flex items-center gap-4">
+        <button id="mobileMenuBtn" class="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+          <i data-lucide="menu" class="w-6 h-6"></i>
+        </button>
+        
+        <!-- LOGO BRANDING -->
+        <a href="#dashboard" onclick="navigateTo('dashboard')" class="flex items-center gap-3 cursor-pointer group">
+          <svg class="h-9 w-9 shrink-0 drop-shadow-sm transition-transform group-hover:scale-105" viewBox="0 0 500 500" fill="none">
+            <defs>
+              <linearGradient id="mainGrad" x1="50" y1="50" x2="450" y2="450" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#2563eb" />
+                <stop offset="45%" stop-color="#4f46e5" />
+                <stop offset="100%" stop-color="#9333ea" />
+              </linearGradient>
+              <linearGradient id="badgeGrad" x1="260" y1="260" x2="440" y2="440" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#06b6d4" />
+                <stop offset="50%" stop-color="#0284c7" />
+                <stop offset="100%" stop-color="#2563eb" />
+              </linearGradient>
+            </defs>
+            <rect x="110" y="130" width="280" height="250" rx="48" fill="url(#mainGrad)" />
+            <rect x="175" y="100" width="28" height="60" rx="14" fill="#0284c7" />
+            <rect x="295" y="100" width="28" height="60" rx="14" fill="#0284c7" />
+            <rect x="132" y="190" width="236" height="165" rx="26" fill="#FFFFFF" />
+            <g fill="#93c5fd">
+              <rect x="160" y="220" width="38" height="34" rx="10" />
+              <rect x="212" y="220" width="38" height="34" rx="10" />
+              <rect x="264" y="220" width="38" height="34" rx="10" fill="#a5b4fc" />
+              <rect x="160" y="268" width="38" height="34" rx="10" />
+              <rect x="212" y="268" width="38" height="34" rx="10" fill="#818cf8" />
+            </g>
+            <circle cx="330" cy="310" r="72" fill="url(#badgeGrad)" stroke="#FFFFFF" stroke-width="10" />
+            <path d="M294 310 L318 334 L366 286" fill="none" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <div class="flex flex-col">
+            <span class="text-xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 leading-none">
+              REMYNDR
+            </span>
+            <span id="brandTaglineEl" class="text-[9px] font-bold tracking-widest text-slate-500 dark:text-slate-400 uppercase mt-1">Every Notice. One Smart Action.</span>
+          </div>
+        </a>
+      </div>
+
+      <!-- HEADER CONTROLS -->
+      <div class="flex items-center gap-3" id="headerControls">
+        <!-- Search Input -->
+        <div id="headerSearchWrapper" class="hidden sm:flex items-center relative w-48 md:w-64">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 text-slate-400"></i>
+          <input type="text" id="globalSearchInput" placeholder="Search notices, tasks, fees..." class="w-full pl-9 pr-4 py-1.5 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-full text-xs outline-none focus:ring-2 focus:ring-blue-500 transition" />
+        </div>
+
+        <!-- Language Selector -->
+        <select id="langSelect" onchange="changeLang(this.value)" class="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none cursor-pointer">
+          <option value="en">English (EN)</option>
+          <option value="hi">हिंदी (HI)</option>
+          <option value="kn">ಕನ್ನಡ (KN)</option>
+        </select>
+
+        <!-- Theme Toggle -->
+        <button id="themeToggleBtn" onclick="toggleTheme()" class="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-slate-600 dark:text-slate-300">
+          <i data-lucide="sun" class="w-4 h-4 hidden dark:block text-amber-400"></i>
+          <i data-lucide="moon" class="w-4 h-4 block dark:hidden text-slate-600"></i>
+        </button>
+
+        <!-- Notification Bell -->
+        <button id="notifBellBtn" onclick="navigateTo('notifications')" class="relative p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-slate-600 dark:text-slate-300">
+          <i data-lucide="bell" class="w-4 h-4"></i>
+          <span id="notifBadge" class="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white dark:ring-slate-900 hidden"></span>
+        </button>
+
+        <!-- Profile Link / Account Control -->
+        <div id="navProfileWrapper" class="hidden md:flex items-center gap-2.5 pl-3 border-l border-slate-200 dark:border-slate-800">
+          <a href="#profile" onclick="navigateTo('profile')" class="flex items-center gap-2.5 cursor-pointer">
+            <div id="navAvatar" class="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+              AS
+            </div>
+            <div class="flex flex-col text-left">
+              <span id="navProfileName" class="text-xs font-bold leading-tight">Student</span>
+              <span id="navProfileSub" class="text-[10px] text-slate-500 dark:text-slate-400">Campus</span>
+            </div>
+          </a>
+          <!-- Logout Action Button -->
+          <button onclick="logoutUser()" title="Log Out" class="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition ml-1">
+            <i data-lucide="log-out" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN BODY SECTION -->
+    <div class="flex flex-1">
+      <!-- SIDEBAR (HIDDEN WHEN UNAUTHENTICATED) -->
+      <aside id="sidebar" class="fixed lg:static inset-y-0 left-0 z-40 w-64 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-r border-slate-200 dark:border-slate-800 transition-transform duration-200 -translate-x-full lg:translate-x-0 flex flex-col justify-between hidden">
+        <div class="p-4 space-y-6">
+          <div class="px-3 pt-2">
+            <p id="sidebarWorkspaceLabel" class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Workspace</p>
+          </div>
+          <nav class="space-y-1" id="sidebarNav"></nav>
+        </div>
+
+        <div class="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-3">
+          <div class="flex items-center justify-between text-xs font-bold text-slate-500">
+            <span>Remyndr Engine</span>
+            <span class="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 text-[10px]">v5.0 Auth-Fix</span>
+          </div>
+          <button id="sidebarLogoutBtn" onclick="logoutUser()" class="w-full py-2 px-3 rounded-xl border border-rose-200 dark:border-rose-900/50 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-xs font-bold transition flex items-center justify-center gap-2">
+            <i data-lucide="log-out" class="w-4 h-4"></i>
+            <span id="logoutBtnLabel">Log Out</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- MAIN PAGE CONTENT CONTAINER -->
+      <main id="mainContainer" class="flex-1 p-4 lg:p-8 max-w-7xl mx-auto w-full space-y-8"></main>
+    </div>
+  </div>
+
+  <!-- TOAST CONTAINER -->
+  <div id="toastContainer" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- MODAL OVERLAY CONTAINER -->
+  <div id="modalOverlay" class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div id="modalBox" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-5 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto"></div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'remyndr_app_data_v50';
+    const supabaseClient = window.supabase.createClient(
+  'https://xoplakybnwhvnysvqkei.supabase.co',
+  'sb_publishable_dg6CzrjuUfaF2mRF4aDohA_gWFvCtId'
+);
+
+    // MULTI-LANGUAGE DICTIONARY
+    const i18nDict = {
+      en: {
+        brandTagline: 'Every Notice. One Smart Action.',
+        searchPlaceholder: 'Search notices, tasks, fees...',
+        workspaceLabel: 'Workspace',
+        logout: 'Log Out',
+        nav: {
+          dashboard: 'Dashboard',
+          circulars: 'All Circulars',
+          actions: 'My Actions & Tasks',
+          deadlines: 'Upcoming Deadlines',
+          completed: 'Completed Tasks',
+          calendar: 'Academic Calendar',
+          checklists: 'Smart Checklists',
+          assistant: 'Ask Remyndr AI',
+          updates: 'Circular Updates',
+          fees: 'Fee Tracker',
+          notifications: 'Notifications',
+          profile: 'Profile',
+          settings: 'Settings'
+        },
+        dashboard: {
+          welcome: 'Welcome back',
+          subtitle: 'Academic Notice Hub & Productivity Suite',
+          summaryBanner: 'You have {pendingActions} pending actions, {eventsCount} scheduled events, and {pendingFees} pending fees.',
+          addNoticeBtn: '+ Upload Notice',
+          viewCalendarBtn: 'View Calendar',
+          totalCirculars: 'Total Circulars',
+          pendingActions: 'Pending Actions',
+          upcomingEvents: 'Upcoming Events',
+          pendingFees: 'Pending Fees',
+          completedTasks: 'Completed Tasks',
+          recentNotices: 'Recent College Notices',
+          viewAll: 'View All'
+        },
+        circulars: {
+          title: 'All Official Circulars',
+          subtitle: 'Centralized repository of all parsed campus notices.',
+          uploadNoticeBtn: '+ Upload Notice',
+          version: 'Version',
+          department: 'Department',
+          issuedOn: 'Issued',
+          eventDate: 'Event Date',
+          eventTime: 'Event Time',
+          deadline: 'Registration / Payment Deadline',
+          venue: 'Venue',
+          fee: 'Fee Amount',
+          eligibility: 'Eligibility',
+          instructions: 'Official Instructions',
+          reviseNotice: 'Revise Notice',
+          close: 'Close',
+          detailsTitle: 'Circular Details'
+        },
+        actions: {
+          title: 'My Actions & Tasks',
+          subtitle: 'Action items auto-generated from campus circular deadlines.',
+          all: 'All',
+          pending: 'Pending',
+          completed: 'Completed',
+          dueDate: 'Due Date',
+          ref: 'Ref Notice',
+          priority: 'Priority',
+          high: 'High',
+          medium: 'Medium',
+          low: 'Low',
+          markDone: 'Mark Done',
+          reopen: 'Reopen',
+          remove: 'Delete Task',
+          detailsTitle: 'Action & Deadline Details',
+          openCircular: 'Open Related Circular',
+          viewInCalendar: 'View Date on Calendar',
+          statusOverdue: 'Overdue by {days} days',
+          statusDueIn: 'Due in {days} days',
+          statusDueToday: 'Due Today'
+        },
+        deadlines: {
+          title: 'Upcoming Deadlines',
+          subtitle: 'Time-sensitive tasks requiring immediate attention.'
+        },
+        calendar: {
+          title: 'Academic Calendar',
+          subtitle: 'Interactive month grid view synced with campus notices & personal deadlines.',
+          addEventBtn: '+ Add Personal Event',
+          today: 'Today',
+          mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun',
+          months: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+          dateDetailsTitle: 'Schedule for {date}',
+          noEvents: 'No events or deadlines scheduled for this date.',
+          addEventForDate: '+ Add Event for this Date',
+          editEvent: 'Edit Event',
+          deleteEvent: 'Delete Event',
+          confirmDeleteEvent: 'Are you sure you want to delete this event?'
+        },
+        assistant: {
+          title: 'Ask Remyndr AI',
+          subtitle: 'Hybrid AI Assistant: Answers questions about your saved circulars or general topics.',
+          placeholder: 'Ask about deadlines, circulars, fees, or general topics...',
+          send: 'Send',
+          thinking: 'Remyndr AI is processing your query...',
+          suggestionsTitle: 'Suggested Questions:',
+          suggestion1: 'What is my next deadline?',
+          suggestion2: 'Summarize my latest circular',
+          suggestion3: 'Which fees are pending?',
+          suggestion4: 'Help me plan today\'s tasks',
+          suggestion5: 'What events are happening this month?',
+          suggestion6: 'Explain how to prepare for hackathons'
+        },
+        upload: {
+          title: 'Upload & Parse College Circular',
+          subtitle: 'Upload PDF, PNG, JPG image or paste text to extract notice fields.',
+          dropzoneTitle: 'Drag & drop notice PDF/Image or click to browse',
+          orPasteText: 'Or paste notice text directly below:',
+          fileSelected: 'Selected File:',
+          extractBtn: 'Parse & Extract Content',
+          extractingBtn: 'Extracting with PDF/OCR AI...',
+          reviewTitle: 'Review Extracted Notice Fields',
+          noticeTitleLabel: 'Notice Title',
+          refIdLabel: 'Circular ID / Reference',
+          deptLabel: 'Department',
+          issueDateLabel: 'Issue Date',
+          eventDateLabel: 'Event Date',
+          eventTimeLabel: 'Event Time',
+          deadlineLabel: 'Registration / Submission Deadline',
+          deadlineWarning: '⚠️ Registration/Submission deadline not detected in text. Specify manually if required.',
+          venueLabel: 'Venue',
+          feeLabel: 'Fee Amount',
+          eligibilityLabel: 'Eligibility',
+          instructionsLabel: 'Official Instructions',
+          saveAndSyncBtn: 'Confirm & Save Circular',
+          cancelBtn: 'Cancel',
+          rawContentTitle: 'Original Extracted Source Content',
+          invalidType: 'Unsupported file format. Please upload PDF, PNG, JPG, or TXT.'
+        },
+        updates: {
+          title: 'Circular Revision & Update System',
+          subtitle: 'Select a target notice, upload revised file or paste text, compare side-by-side, and publish.',
+          step1: '1. Select Target Notice to Revise',
+          step2: '2. Side-by-Side Field Comparison (Previous vs Extracted Proposed)',
+          pasteUpdated: 'Upload revised document (PDF/Image) or paste updated text:',
+          runDiffBtn: 'Extract & Compare Diffs from Source',
+          fieldHeader: 'Field',
+          prevHeader: 'Current Stored Value',
+          proposedHeader: 'Newly Extracted Proposed Value',
+          publishBtn: 'Confirm & Publish Revision',
+          historyTitle: 'Revision History'
+        },
+        fees: {
+          title: 'Fee Tracker',
+          subtitle: 'Track payment status for campus notices requiring financial clearance.',
+          pending: 'Pending',
+          paid: 'Paid',
+          dueDate: 'Due:',
+          paidOn: 'Paid on'
+        },
+        checklists: {
+          title: 'Smart Checklists',
+          subtitle: 'Actionable breakdown for major campus events & deadlines.',
+          doneCount: '{pct}% Completed'
+        },
+        notifications: {
+          title: 'Notifications',
+          subtitle: 'Alerts and reminders regarding upcoming notice deadlines.',
+          markAllRead: 'Mark All Read'
+        },
+        profile: {
+          title: 'Student Profile',
+          subtitle: 'Manage your personal academic details and workspace preferences.',
+          displayName: 'Display Name',
+          email: 'Email Address',
+          college: 'Institution Name',
+          saveBtn: 'Save Profile'
+        },
+        settings: {
+          title: 'Settings',
+          subtitle: 'Customize application language, dark theme, and accounts.',
+          uiLang: 'UI Interface Language',
+          accountMgmt: 'Account Management',
+          accountSub: 'Manage local user sessions and password settings.',
+          addAccount: 'Add New Account',
+          changePassword: 'Change Password',
+          deleteAccount: 'Delete Account Data'
+        },
+        auth: {
+          loginTitle: 'Welcome to Remyndr',
+          loginSub: 'Sign in to access your campus notice workspace.',
+          emailLabel: 'Email Address',
+          passwordLabel: 'Password',
+          nameLabel: 'Full Name',
+          collegeLabel: 'Institution / College',
+          confirmPassLabel: 'Confirm Password',
+          showPass: 'Show',
+          hidePass: 'Hide',
+          loginTab: 'Log In',
+          signupTab: 'Create Account',
+          loginBtn: 'Log In to Workspace',
+          createAccountBtn: 'Create New Account',
+          forgotPassBtn: 'Forgot Password?',
+          noAccount: "Don't have an account?",
+          createAccountLink: 'Create Account',
+          invalidCreds: 'Please enter valid email and password.',
+          loginSuccess: 'Logged in successfully!',
+          logoutSuccess: 'Logged out successfully.',
+          resetPassTitle: 'Password Recovery / Reset',
+          resetPassSub: 'Local mode note: Security tokens are managed on your device.',
+          currentPassLabel: 'Current Password',
+          newPassLabel: 'New Password',
+          submitChangePass: 'Update Password',
+          demoModeNotice: '🔐 Remyndr is operating in local multi-account mode. Data is stored securely per account.'
+        },
+        common: {
+          cancel: 'Cancel',
+          save: 'Save',
+          close: 'Close',
+          delete: 'Delete',
+          edit: 'Edit',
+          confirm: 'Confirm',
+          notSpecified: 'Not specified',
+          noInstructions: 'No official instructions found in the circular.',
+          successToast: 'Action completed successfully!',
+          errorToast: 'An error occurred. Please try again.'
+        }
+      },
+      hi: {
+        brandTagline: 'प्रत्येक सूचना। एक स्मार्ट कार्रवाई।',
+        searchPlaceholder: 'सूचनाएं, कार्य, शुल्क खोजें...',
+        workspaceLabel: 'कार्यक्षेत्र',
+        logout: 'लॉग आउट',
+        nav: {
+          dashboard: 'डैशबोर्ड',
+          circulars: 'सभी सूचनाएं',
+          actions: 'मेरे कार्य',
+          deadlines: 'आगामी समय-सीमा',
+          completed: 'पूरे किए गए कार्य',
+          calendar: 'अकादमिक कैलेंडर',
+          checklists: 'स्मार्ट चेकलिस्ट',
+          assistant: 'रिमाइंडर AI से पूछें',
+          updates: 'सूचना संशोधन',
+          fees: 'शुल्क ट्रैकर',
+          notifications: 'अधिसूचनाएं',
+          profile: 'प्रोफाइल',
+          settings: 'सेटिंग्स'
+        },
+        dashboard: {
+          welcome: 'वापसी पर स्वागत है',
+          subtitle: 'अकादमिक नोटिस हब और उत्पादकता सुइट',
+          summaryBanner: 'आपके पास {pendingActions} लंबित कार्य, {eventsCount} निर्धारित कार्यक्रम, और {pendingFees} लंबित शुल्क हैं।',
+          addNoticeBtn: '+ नोटिस अपलोड करें',
+          viewCalendarBtn: 'कैलेंडर देखें',
+          totalCirculars: 'कुल सूचनाएं',
+          pendingActions: 'लंबित कार्य',
+          upcomingEvents: 'आगामी कार्यक्रम',
+          pendingFees: 'लंबित शुल्क',
+          completedTasks: 'पूरे किए गए कार्य',
+          recentNotices: 'हाल की कॉलेज सूचनाएं',
+          viewAll: 'सभी देखें'
+        },
+        circulars: {
+          title: 'सभी आधिकारिक सूचनाएं',
+          subtitle: 'सभी पार्स किए गए परिसर नोटिसों का केंद्रीकृत भंडार।',
+          uploadNoticeBtn: '+ नोटिस अपलोड करें',
+          version: 'संस्करण',
+          department: 'विभाग',
+          issuedOn: 'जारी किया गया',
+          eventDate: 'कार्यक्रम तिथि',
+          eventTime: 'कार्यक्रम समय',
+          deadline: 'पंजीकरण / भुगतान समय-सीमा',
+          venue: 'स्थान',
+          fee: 'शुल्क राशि',
+          eligibility: 'पात्रता',
+          instructions: 'आधिकारिक निर्देश',
+          reviseNotice: 'नोटिस संशोधित करें',
+          close: 'बंद करें',
+          detailsTitle: 'सूचना विवरण'
+        },
+        actions: {
+          title: 'मेरे कार्य और लक्ष्य',
+          subtitle: 'कैंपस सर्कुलर डेडलाइन से स्वतः उत्पन्न कार्य।',
+          all: 'सभी',
+          pending: 'लंबित',
+          completed: 'पूरा हुआ',
+          dueDate: 'अंतिम तिथि',
+          ref: 'संदर्भ नोटिस',
+          priority: 'प्राथमिकता',
+          high: 'उच्च',
+          medium: 'मध्यम',
+          low: 'कम',
+          markDone: 'पूर्ण चिह्नित करें',
+          reopen: 'पुनः खोलें',
+          remove: 'कार्य हटाएं',
+          detailsTitle: 'कार्य और समय-सीमा विवरण',
+          openCircular: 'संबंधित सर्कुलर खोलें',
+          viewInCalendar: 'कैलेंडर पर तिथि देखें',
+          statusOverdue: '{days} दिन विलंबित',
+          statusDueIn: '{days} दिनों में देय',
+          statusDueToday: 'आज देय है'
+        },
+        deadlines: {
+          title: 'आगामी समय-सीमा',
+          subtitle: 'तत्काल ध्यान देने योग्य कार्य।'
+        },
+        calendar: {
+          title: 'अकादमिक कैलेंडर',
+          subtitle: 'परिसर की सूचनाओं और व्यक्तिगत समय-सीमा के साथ सिंक किया गया कैलेंडर।',
+          addEventBtn: '+ व्यक्तिगत कार्यक्रम जोड़ें',
+          today: 'आज',
+          mon: 'सोम', tue: 'मंगल', wed: 'बुध', thu: 'गुरु', fri: 'शुक्र', sat: 'शनि', sun: 'रवि',
+          months: ['जनवरी', 'फरवरी', 'मार्च', 'अप्रैल', 'मई', 'जून', 'जुलाई', 'अगस्त', 'सितंबर', 'अक्टूबर', 'नवंबर', 'दिसंबर'],
+          dateDetailsTitle: '{date} के लिए अनुसूची',
+          noEvents: 'इस तिथि के लिए कोई कार्यक्रम या समय-सीमा निर्धारित नहीं है।',
+          addEventForDate: '+ इस तिथि के लिए कार्यक्रम जोड़ें',
+          editEvent: 'संपादित करें',
+          deleteEvent: 'हटाएं',
+          confirmDeleteEvent: 'क्या आप वाकई इस कार्यक्रम को हटाना चाहते हैं?'
+        },
+        assistant: {
+          title: 'रिमाइंडर AI से पूछें',
+          subtitle: 'हाइब्रिड AI सहायक: आपके सहेजे गए सर्कुलर या सामान्य विषयों के बारे में प्रश्नों के उत्तर देता है।',
+          placeholder: 'समय-सीमा, सर्कुलर, शुल्क या सामान्य विषयों के बारे में पूछें...',
+          send: 'भेजें',
+          thinking: 'रिमाइंडर AI आपके प्रश्न पर विचार कर रहा है...',
+          suggestionsTitle: 'सुझाए गए प्रश्न:',
+          suggestion1: 'मेरी अगली समय-सीमा क्या है?',
+          suggestion2: 'मेरे नवीनतम सर्कुलर का सारांश दें',
+          suggestion3: 'कौन से शुल्क अवैतनिक हैं?',
+          suggestion4: 'आज के कार्यों की योजना बनाने में मेरी सहायता करें',
+          suggestion5: 'इस महीने कौन से कार्यक्रम हो रहे हैं?',
+          suggestion6: 'हैकथॉन की तैयारी कैसे करें समझाएं'
+        },
+        upload: {
+          title: 'कॉलेज सर्कुलर अपलोड और पार्स करें',
+          subtitle: 'वास्तविक नोटिस फ़ील्ड निकालने के लिए PDF/छवि अपलोड करें या पाठ पेस्ट करें।',
+          dropzoneTitle: 'नोटिस PDF/इमेज ड्राप करें या ब्राउज़ करने के लिए क्लिक करें',
+          orPasteText: 'या नीचे सीधे नोटिस टेक्स्ट पेस्ट करें:',
+          fileSelected: 'चयनित फ़ाइल:',
+          extractBtn: 'सामग्री पार्स और एक्सट्रैक्ट करें',
+          extractingBtn: 'PDF/OCR AI के साथ एक्सट्रैक्ट हो रहा है...',
+          reviewTitle: 'एक्सट्रैक्ट किए गए फ़ील्ड्स की समीक्षा करें',
+          noticeTitleLabel: 'नोटिस शीर्षक',
+          refIdLabel: 'सर्कुलर आईडी / संदर्भ',
+          deptLabel: 'विभाग',
+          issueDateLabel: 'जारी तिथि',
+          eventDateLabel: 'कार्यक्रम तिथि',
+          eventTimeLabel: 'कार्यक्रम समय',
+          deadlineLabel: 'पंजीकरण / सबमिशन समय-सीमा',
+          deadlineWarning: '⚠️ पाठ में समय-सीमा नहीं मिली। यदि आवश्यक हो तो मैन्युअल रूप से निर्दिष्ट करें।',
+          venueLabel: 'स्थान',
+          feeLabel: 'शुल्क राशि',
+          eligibilityLabel: 'पात्रता',
+          instructionsLabel: 'आधिकारिक निर्देश',
+          saveAndSyncBtn: 'पुष्टि करें और सर्कुलर सहेजें',
+          cancelBtn: 'रद्द करें',
+          rawContentTitle: 'मूल एक्सट्रैक्ट किया गया स्रोत पाठ',
+          invalidType: 'असमर्थित फ़ाइल स्वरूप। कृपया PDF, PNG, JPG, या TXT अपलोड करें।'
+        },
+        updates: {
+          title: 'सर्कुलर संशोधन और अपडेट सिस्टम',
+          subtitle: 'लक्ष्य नोटिस चुनें, संशोधित फ़ाइल/टेक्स्ट अपलोड करें, तुलना करें और प्रकाशित करें।',
+          step1: '1. संशोधित करने के लिए लक्ष्य नोटिस चुनें',
+          step2: '2. फ़ील्ड की तुलना करें (वर्तमान बनाम नया एक्सट्रैक्ट किया गया)',
+          pasteUpdated: 'संशोधित दस्तावेज़ अपलोड करें या अद्यतन पाठ पेस्ट करें:',
+          runDiffBtn: 'स्रोत से अंतर निकालें और तुलना करें',
+          fieldHeader: 'फ़ील्ड',
+          prevHeader: 'वर्तमान सहेजा गया मान',
+          proposedHeader: 'नया एक्सट्रैक्ट किया गया प्रस्तावित मान',
+          publishBtn: 'पुष्टि करें और संशोधन प्रकाशित करें',
+          historyTitle: 'संशोधन इतिहास'
+        },
+        fees: {
+          title: 'शुल्क ट्रैकर',
+          subtitle: 'वित्तीय मंजूरी की आवश्यकता वाले कैंपस नोटिसों के लिए भुगतान स्थिति को ट्रैक करें।',
+          pending: 'लंबित',
+          paid: 'भुगतान किया गया',
+          dueDate: 'अंतिम तिथि:',
+          paidOn: 'भुगतान तिथि:'
+        },
+        checklists: {
+          title: 'स्मार्ट चेकलिस्ट',
+          subtitle: 'प्रमुख कैंपस कार्यक्रमों और समय-सीमाओं के लिए कार्य योजना।',
+          doneCount: '{pct}% पूर्ण'
+        },
+        notifications: {
+          title: 'अधिसूचनाएं',
+          subtitle: 'आगामी नोटिस समय-सीमा के संबंध में अलर्ट और रिमाइंडर।',
+          markAllRead: 'सभी को पढ़ा हुआ चिह्नित करें'
+        },
+        profile: {
+          title: 'छात्र प्रोफाइल',
+          subtitle: 'अपने व्यक्तिगत विवरण और प्राथमिकताओं को प्रबंधित करें।',
+          displayName: 'प्रदर्शित नाम',
+          email: 'ईमेल पता',
+          college: 'संस्थान का नाम',
+          saveBtn: 'प्रोफाइल सहेजें'
+        },
+        settings: {
+          title: 'सेटिंग्स',
+          subtitle: 'एप्लिकेशन भाषा, थीम और खाते कस्टमाइज़ करें।',
+          uiLang: 'इंटरफेस भाषा',
+          accountMgmt: 'खाता प्रबंधन',
+          accountSub: 'उपयोगकर्ता सत्र और पासवर्ड सेटिंग्स प्रबंधित करें।',
+          addAccount: 'नया खाता जोड़ें',
+          changePassword: 'पासवर्ड बदलें',
+          deleteAccount: 'खाता डेटा हटाएं'
+        },
+        auth: {
+          loginTitle: 'रिमाइंडर में आपका स्वागत है',
+          loginSub: 'अपने कैंपस नोटिस वर्कस्पेस तक पहुंचने के लिए साइन इन करें।',
+          emailLabel: 'ईमेल पता',
+          passwordLabel: 'पासवर्ड',
+          nameLabel: 'पूरा नाम',
+          collegeLabel: 'संस्थान / कॉलेज',
+          confirmPassLabel: 'पासवर्ड की पुष्टि करें',
+          showPass: 'दिखाएं',
+          hidePass: 'छिपाएं',
+          loginTab: 'लॉग इन',
+          signupTab: 'खाता बनाएं',
+          loginBtn: 'लॉग इन करें',
+          createAccountBtn: 'नया खाता बनाएं',
+          forgotPassBtn: 'पासवर्ड भूल गए?',
+          noAccount: 'खाता नहीं है?',
+          createAccountLink: 'खाता बनाएं',
+          invalidCreds: 'कृपया अमान्य ईमेल और पासवर्ड दर्ज करें।',
+          loginSuccess: 'सफलतापूर्वक लॉग इन किया गया!',
+          logoutSuccess: 'सफलतापूर्वक लॉग आउट किया गया।',
+          resetPassTitle: 'पासवर्ड रिकवरी',
+          resetPassSub: 'लोकल मोड नोट: सुरक्षा टोकन आपके डिवाइस पर प्रबंधित किए जाते हैं।',
+          currentPassLabel: 'वर्तमान पासवर्ड',
+          newPassLabel: 'नया पासवर्ड',
+          submitChangePass: 'पासवर्ड अपडेट करें',
+          demoModeNotice: '🔐 रिमाइंडर लोकल मल्टी-अकाउंट मोड में काम कर रहा है।'
+        },
+        common: {
+          cancel: 'रद्द करें',
+          save: 'सहेजें',
+          close: 'बंद करें',
+          delete: 'हटाएं',
+          edit: 'संपादित करें',
+          confirm: 'पुष्टि करें',
+          notSpecified: 'निर्दिष्ट नहीं',
+          noInstructions: 'परिसर सूचना में कोई आधिकारिक निर्देश नहीं मिला।',
+          successToast: 'कार्रवाई सफलतापूर्वक पूरी हुई!',
+          errorToast: 'एक त्रुटि हुई। कृपया पुन: प्रयास करें।'
+        }
+      },
+      kn: {
+        brandTagline: 'ಪ್ರತಿ ಪ್ರಕಟಣೆ. ಒಂದು ಸ್ಮಾರ್ಟ್ ಕ್ರಿಯೆ.',
+        searchPlaceholder: 'ಪ್ರಕಟಣೆಗಳು, ಕಾರ್ಯಗಳು, ಶುಲ್ಕಗಳನ್ನು ಹುಡುಕಿ...',
+        workspaceLabel: 'ಕಾರ್ಯಕ್ಷೇತ್ರ',
+        logout: 'ಲಾಗ್ ಔಟ್',
+        nav: {
+          dashboard: 'ಡ್ಯಾಶ್‌ಬೋರ್ಡ್',
+          circulars: 'ಎಲ್ಲಾ ಪ್ರಕಟಣೆಗಳು',
+          actions: 'ನನ್ನ ಕಾರ್ಯಗಳು',
+          deadlines: 'ಮುಂಬರುವ ಗಡುವುಗಳು',
+          completed: 'ಪೂರ್ಣಗೊಂಡ ಕಾರ್ಯಗಳು',
+          calendar: 'ಶೈಕ್ಷಣಿಕ ಕ್ಯಾಲೆಂಡರ್',
+          checklists: 'ಸ್ಮಾರ್ಟ್ ಚೆಕ್‌ಲಿಸ್ಟ್‌ಗಳು',
+          assistant: 'ರಿಮೈಂಡರ್ AI ಕೇಳಿ',
+          updates: 'ಪ್ರಕಟಣೆ ತಿದ್ದುಪಡಿ',
+          fees: 'ಶುಲ್ಕ ಟ್ರ್ಯಾಕರ್',
+          notifications: 'ಸೂಚನೆಗಳು',
+          profile: 'ಪ್ರೊಫೈಲ್',
+          settings: 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು'
+        },
+        dashboard: {
+          welcome: 'ಮತ್ತೆ ಸ್ವಾಗತ',
+          subtitle: 'ಶೈಕ್ಷಣಿಕ ಪ್ರಕಟಣೆ ಕೇಂದ್ರ ಮತ್ತು ಕಾರ್ಯಕ್ಷಮತೆ ಸೂಟ್',
+          summaryBanner: 'ನಿಮಗೆ {pendingActions} ಬಾಕಿ ಇರುವ ಕಾರ್ಯಗಳು, {eventsCount} ನಿಗದಿತ ಕಾರ್ಯಕ್ರಮಗಳು, ಮತ್ತು {pendingFees} ಬಾಕಿ ಶುಲ್ಕಗಳಿವೆ.',
+          addNoticeBtn: '+ ಪ್ರಕಟಣೆ ಅಪ್‌ಲೋಡ್ ಮಾಡಿ',
+          viewCalendarBtn: 'ಕ್ಯಾಲೆಂಡರ್ ವೀಕ್ಷಿಸಿ',
+          totalCirculars: 'ಒಟ್ಟು ಪ್ರಕಟಣೆಗಳು',
+          pendingActions: 'ಬಾಕಿ ಇರುವ ಕಾರ್ಯಗಳು',
+          upcomingEvents: 'ಮುಂಬರುವ ಕಾರ್ಯಕ್ರಮಗಳು',
+          pendingFees: 'ಬಾಕಿ ಶುಲ್ಕಗಳು',
+          completedTasks: 'ಪೂರ್ಣಗೊಂಡ ಕಾರ್ಯಗಳು',
+          recentNotices: 'ಇತ್ತೀಚಿನ ಕಾಲೇಜು ಪ್ರಕಟಣೆಗಳು',
+          viewAll: 'ಎಲ್ಲವನ್ನೂ ವೀಕ್ಷಿಸಿ'
+        },
+        circulars: {
+          title: 'ಎಲ್ಲಾ ಅಧಿಕೃತ ಪ್ರಕಟಣೆಗಳು',
+          subtitle: 'ಪಾರ್ಸ್ ಮಾಡಲಾದ ಎಲ್ಲಾ ಕ್ಯಾಂಪಸ್ ಪ್ರಕಟಣೆಗಳ ಕೇಂದ್ರ ಸಂಗ್ರಹ.',
+          uploadNoticeBtn: '+ ಪ್ರಕಟಣೆ ಅಪ್‌ಲೋಡ್ ಮಾಡಿ',
+          version: 'ಆವೃತ್ತಿ',
+          department: 'ಇಲಾಖೆ',
+          issuedOn: 'ನೀಡಿದ ದಿನಾಂಕ',
+          eventDate: 'ಕಾರ್ಯಕ್ರಮ ದಿನಾಂಕ',
+          eventTime: 'ಕಾರ್ಯಕ್ರಮ ಸಮಯ',
+          deadline: 'ನೋಂದಣಿ / ಪಾವತಿ ಗಡುವು',
+          venue: 'ಸ್ಥಳ',
+          fee: 'ಶುಲ್ಕ ಮೊತ್ತ',
+          eligibility: 'ಅರ್ಹತೆ',
+          instructions: 'ಅಧಿಕೃತ ಸೂಚನೆಗಳು',
+          reviseNotice: 'ತಿದ್ದುಪಡಿ ಮಾಡಿ',
+          close: 'ಮುಚ್ಚಿ',
+          detailsTitle: 'ಪ್ರಕಟಣೆ ವಿವರಗಳು'
+        },
+        actions: {
+          title: 'ನನ್ನ ಕಾರ್ಯಗಳು',
+          subtitle: 'ಕ್ಯಾಂಪಸ್ ಗಡುವುಗಳಿಂದ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ರಚಿಸಲಾದ ಕಾರ್ಯಗಳು.',
+          all: 'ಎಲ್ಲಾ',
+          pending: 'ಬಾಕಿ ಇರುವವು',
+          completed: 'ಪೂರ್ಣಗೊಂಡವು',
+          dueDate: 'ಕೊನೆಯ ದಿನಾಂಕ',
+          ref: 'ಉಲ್ಲೇಖ',
+          priority: 'ಆದ್ಯತೆ',
+          high: 'ಹೆಚ್ಚು',
+          medium: 'ಮಧ್ಯಮ',
+          low: 'ಕಡಿಮೆ',
+          markDone: 'ಪೂರ್ಣಗೊಳಿಸಿ',
+          reopen: 'ಮತ್ತೆ ತೆರೆಯಿರಿ',
+          remove: 'ಕಾರ್ಯ ಅಳಿಸಿ',
+          detailsTitle: 'ಕಾರ್ಯ ಮತ್ತು ಗಡುವು ವಿವರಗಳು',
+          openCircular: 'ಸಂಬಂಧಿತ ಪ್ರಕಟಣೆ ತೆರೆಯಿರಿ',
+          viewInCalendar: 'ಕ್ಯಾಲೆಂಡರ್‌ನಲ್ಲಿ ದಿನಾಂಕ ವೀಕ್ಷಿಸಿ',
+          statusOverdue: '{days} ದಿನ ತಡವಾಗಿದೆ',
+          statusDueIn: '{days} ದಿನಗಳಲ್ಲಿ ಕೊನೆಯ ದಿನಾಂಕ',
+          statusDueToday: 'ಇಂದೇ ಕೊನೆಯ ದಿನಾಂಕ'
+        },
+        deadlines: {
+          title: 'ಮುಂಬರುವ ಗಡುವುಗಳು',
+          subtitle: 'ತಕ್ಷಣ ಗಮನ ಹರಿಸಬೇಕಾದ ಕಾರ್ಯಗಳು.'
+        },
+        calendar: {
+          title: 'ಶೈಕ್ಷಣಿಕ ಕ್ಯಾಲೆಂಡರ್',
+          subtitle: 'ಕ್ಯಾಂಪಸ್ ಪ್ರಕಟಣೆಗಳು ಮತ್ತು ವೈಯಕ್ತಿಕ ಗಡುವುಗಳೊಂದಿಗೆ ಸಿಂಕ್ ಮಾಡಲಾದ ಕ್ಯಾಲೆಂಡರ್.',
+          addEventBtn: '+ ವೈಯಕ್ತಿಕ ಕಾರ್ಯಕ್ರಮ ಸೇರಿಸಿ',
+          today: 'ಇಂದು',
+          mon: 'ಸೋಮ', tue: 'ಮಂಗಳ', wed: 'ಬುಧ', thu: 'ಗುರು', fri: 'ಶುಕ್ರ', sat: 'ಶನಿ', sun: 'ಭಾನುವಾರ',
+          months: ['ಜನವರಿ', 'ಫೆಬ್ರವರಿ', 'ಮಾರ್ಚ್', 'ಏಪ್ರಿಲ್', 'ಮೇ', 'ಜೂನ್', 'ಜುಲೈ', 'ಆಗಸ್ಟ್', 'ಸೆಪ್ಟೆಂಬರ್', 'ಅಕ್ಟೋಬರ್', 'ನವೆಂಬರ್', 'ಡಿಸೆಂಬರ್'],
+          dateDetailsTitle: '{date} ರ ವೇಳಾಪಟ್ಟಿ',
+          noEvents: 'ಈ ದಿನಾಂಕಕ್ಕೆ ಯಾವುದೇ ಕಾರ್ಯಕ್ರಮ ಅಥವಾ ಗಡುವು ನಿಗದಿಯಾಗಿಲ್ಲ.',
+          addEventForDate: '+ ಈ ದಿನಾಂಕಕ್ಕೆ ಕಾರ್ಯಕ್ರಮ ಸೇರಿಸಿ',
+          editEvent: 'ಸಂಪಾದಿಸಿ',
+          deleteEvent: 'ಅಳಿಸಿ',
+          confirmDeleteEvent: 'ನೀವು ನಿಜವಾಗಿಯೂ ಈ ಕಾರ್ಯಕ್ರಮವನ್ನು ಅಳಿಸಲು ಬಯಸುತ್ತೀರಾ?'
+        },
+        assistant: {
+          title: 'ರಿಮೈಂಡರ್ AI ಕೇಳಿ',
+          subtitle: 'ಹೈಬ್ರಿಡ್ AI ಸಹಾಯಕ: ನಿಮ್ಮ ಪ್ರಕಟಣೆಗಳು ಅಥವಾ ಸಾಮಾನ್ಯ ವಿಷಯಗಳ ಬಗ್ಗೆ ಉತ್ತರಿಸುತ್ತದೆ.',
+          placeholder: 'ಗಡುವುಗಳು, ಪ್ರಕಟಣೆಗಳು ಅಥವಾ ಸಾಮಾನ್ಯ ವಿಷಯಗಳ ಬಗ್ಗೆ ಕೇಳಿ...',
+          send: 'ಕಳುಹಿಸಿ',
+          thinking: 'ರಿಮೈಂಡರ್ AI ಪರಿಶೀಲಿಸುತ್ತಿದೆ...',
+          suggestionsTitle: 'ಸಲಹೆ ನೀಡಿದ ಪ್ರಶ್ನೆಗಳು:',
+          suggestion1: 'ನನ್ನ ಮುಂದಿನ ಗಡುವು ಯಾವುದು?',
+          suggestion2: 'ನನ್ನ ಇತ್ತೀಚಿನ ಪ್ರಕಟಣೆಯ ಸಾರಾಂಶ ನೀಡಿ',
+          suggestion3: 'ಯಾವ ಶುಲ್ಕಗಳು ಬಾಕಿ ಇವೆ?',
+          suggestion4: 'ಇಂದಿನ ಕಾರ್ಯಗಳನ್ನು ಯೋಜಿಸಲು ಸಹಾಯ ಮಾಡಿ',
+          suggestion5: 'ಈ ತಿಂಗಳು ಯಾವ ಕಾರ್ಯಕ್ರಮಗಳು ನಡೆಯುತ್ತಿವೆ?',
+          suggestion6: 'ಹ್ಯಾಕಥಾನ್‌ಗೆ ಹೇಗೆ ಸಿದ್ಧರಾಗಬೇಕು ವಿವರಿಸಿ'
+        },
+        upload: {
+          title: 'ಕಾಲೇಜು ಪ್ರಕಟಣೆ ಅಪ್‌ಲೋಡ್ ಮತ್ತು ಪಾರ್ಸ್ ಮಾಡಿ',
+          subtitle: 'ವಿವರಗಳನ್ನು ಹೊರತೆಗೆಯಲು PDF/ಚಿತ್ರ ಅಪ್‌ಲೋಡ್ ಮಾಡಿ ಅಥವಾ ಪಠ್ಯ ಅಂಟಿಸಿ.',
+          dropzoneTitle: 'ಪ್ರಕಟಣೆ PDF/ಚಿತ್ರವನ್ನು ಡ್ರಾಪ್ ಮಾಡಿ ಅಥವಾ ಬ್ರೌಸ್ ಮಾಡಲು ಕ್ಲಿಕ್ ಮಾಡಿ',
+          orPasteText: 'ಅಥವಾ ಪಠ್ಯವನ್ನು ನೇರವಾಗಿ ಕೆಳಗೆ ಅಂಟಿಸಿ:',
+          fileSelected: 'ಆಯ್ಕೆಮಾಡಿದ ಫೈಲ್:',
+          extractBtn: 'ಪಠ್ಯವನ್ನು ಪಾರ್ಸ್ ಮಾಡಿ ವಿವರಗಳನ್ನು ಹೊರತೆಗೆಯಿರಿ',
+          extractingBtn: 'PDF/OCR AI ನೊಂದಿಗೆ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ...',
+          reviewTitle: 'ಹೊರತೆಗೆಯಲಾದ ವಿವರಗಳನ್ನು ಪರಿಶೀಲಿಸಿ',
+          noticeTitleLabel: 'ಪ್ರಕಟಣೆ ಶೀರ್ಷಿಕೆ',
+          refIdLabel: 'ಉಲ್ಲೇಖ ಐಡಿ',
+          deptLabel: 'ಇಲಾಖೆ',
+          issueDateLabel: 'ನೀಡಿದ ದಿನಾಂಕ',
+          eventDateLabel: 'ಕಾರ್ಯಕ್ರಮ ದಿನಾಂಕ',
+          eventTimeLabel: 'ಕಾರ್ಯಕ್ರಮ ಸಮಯ',
+          deadlineLabel: 'ನೋಂದಣಿ / ಸಲ್ಲಿಕೆ ಗಡುವು',
+          deadlineWarning: '⚠️ ಪಠ್ಯದಲ್ಲಿ ಗಡುವು ಪತ್ತೆಯಾಗಿಲ್ಲ. ಅಗತ್ಯವಿದ್ದರೆ ಹಸ್ತಚಾಲಿತವಾಗಿ ಆಯ್ಕೆಮಾಡಿ.',
+          venueLabel: 'ಸ್ಥಳ',
+          feeLabel: 'ಶುಲ್ಕ ಮೊತ್ತ',
+          eligibilityLabel: 'ಅರ್ಹತೆ',
+          instructionsLabel: 'ಅಧಿಕೃತ ಸೂಚನೆಗಳು',
+          saveAndSyncBtn: 'ಖಚಿತಪಡಿಸಿ ಮತ್ತು ಪ್ರಕಟಣೆ ಉಳಿಸಿ',
+          cancelBtn: 'ರದ್ದುಗೊಳಿಸಿ',
+          rawContentTitle: 'ಮೂಲ ಹೊರತೆಗೆಯಲಾದ ಪಠ್ಯ',
+          invalidType: 'ಬೆಂಬಲವಿಲ್ಲದ ಫೈಲ್ ಫಾರ್ಮ್ಯಾಟ್. ದಯವಿಟ್ಟು PDF, PNG, JPG ಅಥವಾ TXT ಅಪ್‌ಲೋಡ್ ಮಾಡಿ.'
+        },
+        updates: {
+          title: 'ಪ್ರಕಟಣೆ ತಿದ್ದುಪಡಿ ವ್ಯವಸ್ಥೆ',
+          subtitle: 'ಪ್ರಕಟಣೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ, ತಿದ್ದುಪಡಿ ಫೈಲ್ ಅಂಟಿಸಿ, ಹೋಲಿಸಿ ಮತ್ತು ಪ್ರಕಟಿಸಿ.',
+          step1: '1. ತಿದ್ದುಪಡಿ ಮಾಡಲು ಪ್ರಕಟಣೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ',
+          step2: '2. ವಿವರಗಳ ಹೋಲಿಕೆ (ಪ್ರಸ್ತುತ ಮೌಲ್ಯ vs ಹೊಸ ಹೊರತೆಗೆಯಲಾದ ಮೌಲ್ಯ)',
+          pasteUpdated: 'ತಿದ್ದುಪಡಿ ಮಾಡಿದ ದಾಖಲೆಯನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ ಅಥವಾ ಪಠ್ಯ ಅಂಟಿಸಿ:',
+          runDiffBtn: 'ಮೂಲದಿಂದ ವ್ಯತ್ಯಾಸಗಳನ್ನು ಹೊರತೆಗೆಯಿರಿ ಮತ್ತು ಹೋಲಿಸಿ',
+          fieldHeader: 'ಕ್ಷೇತ್ರ',
+          prevHeader: 'ಪ್ರಸ್ತುತ ಸಂಗ್ರಹಿಸಿದ ಮೌಲ್ಯ',
+          proposedHeader: 'ಹೊಸದಾಗಿ ಹೊರತೆಗೆಯಲಾದ ಮೌಲ್ಯ',
+          publishBtn: 'ಖಚಿತಪಡಿಸಿ ಮತ್ತು ಪ್ರಕಟಿಸಿ',
+          historyTitle: 'ತಿದ್ದುಪಡಿ ಇತಿಹಾಸ'
+        },
+        fees: {
+          title: 'ಶುಲ್ಕ ಟ್ರ್ಯಾಕರ್',
+          subtitle: 'ಪಾವತಿ ಅಗತ್ಯವಿರುವ ಕ್ಯಾಂಪಸ್ ಪ್ರಕಟಣೆಗಳ ಸ್ಥಿತಿಯನ್ನು ಟ್ರ್ಯಾಕ್ ಮಾಡಿ.',
+          pending: 'ಬಾಕಿ ಇದೆ',
+          paid: 'ಪಾವತಿಸಲಾಗಿದೆ',
+          dueDate: 'ಕೊನೆಯ ದಿನಾಂಕ:',
+          paidOn: 'ಪಾವತಿಸಿದ ದಿನಾಂಕ:'
+        },
+        checklists: {
+          title: 'ಸ್ಮಾರ್ಟ್ ಚೆಕ್‌ಲಿಸ್ಟ್‌ಗಳು',
+          subtitle: 'ಪ್ರಮುಖ ಕ್ಯಾಂಪಸ್ ಕಾರ್ಯಕ್ರಮಗಳು ಮತ್ತು ಗಡುವುಗಳ ಕ್ರಿಯಾ ಯೋಜನೆ.',
+          doneCount: '{pct}% ಪೂರ್ಣಗೊಂಡಿದೆ'
+        },
+        notifications: {
+          title: 'ಸೂಚನೆಗಳು',
+          subtitle: 'ಮುಂಬರುವ ಪ್ರಕಟಣೆ ಗಡುವುಗಳ ಕುರಿತು ಎಚ್ಚರಿಕೆಗಳು.',
+          markAllRead: 'ಎಲ್ಲವನ್ನೂ ಓದಲಾಗಿದೆ ಎಂದು ಗುರುತಿಸಿ'
+        },
+        profile: {
+          title: 'ವಿದ್ಯಾರ್ಥಿ ಪ್ರೊಫೈಲ್',
+          subtitle: 'ನಿಮ್ಮ ವೈಯಕ್ತಿಕ ವಿವರಗಳು ಮತ್ತು ಆದ್ಯತೆಗಳನ್ನು ನಿರ್ವಹಿಸಿ.',
+          displayName: 'ಹೆಸರು',
+          email: 'ಇಮೇಲ್ ವಿಳಾಸ',
+          college: 'ಸಂಸ್ಥೆಯ ಹೆಸರು',
+          saveBtn: 'ಪ್ರೊಫೈಲ್ ಉಳಿಸಿ'
+        },
+        settings: {
+          title: 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು',
+          subtitle: 'ಭಾಷೆ, ಥೀಮ್ ಮತ್ತು ಖಾತೆಗಳನ್ನು ಕಸ್ಟಮೈಸ್ ಮಾಡಿ.',
+          uiLang: 'ಇಂಟರ್ಫೇಸ್ ಭಾಷೆ',
+          accountMgmt: 'ಖಾತೆ ನಿರ್ವಹಣೆ',
+          accountSub: 'ಬಳಕೆದಾರ ಸೆಷನ್ ಮತ್ತು ಪಾಸ್‌ವರ್ಡ್ ನಿರ್ವಹಿಸಿ.',
+          addAccount: 'ಹೊಸ ಖಾತೆ ಸೇರಿಸಿ',
+          changePassword: 'ಪಾಸ್‌ವರ್ಡ್ ಬದಲಾಯಿಸಿ',
+          deleteAccount: 'ಖಾತೆ ಡೇಟಾ ಅಳಿಸಿ'
+        },
+        auth: {
+          loginTitle: 'ರಿಮೈಂಡರ್‌ಗೆ ಸ್ವಾಗತ',
+          loginSub: 'ನಿಮ್ಮ ಕ್ಯಾಂಪಸ್ ಪ್ರಕಟಣೆ ಕಾರ್ಯಕ್ಷೇತ್ರಕ್ಕೆ ಲಾಗಿನ್ ಮಾಡಿ.',
+          emailLabel: 'ಇಮೇಲ್ ವಿಳಾಸ',
+          passwordLabel: 'ಪಾಸ್‌ವರ್ಡ್',
+          nameLabel: 'ಪೂರ್ಣ ಹೆಸರು',
+          collegeLabel: 'ಸಂಸ್ಥೆ / ಕಾಲೇಜು',
+          confirmPassLabel: 'ಪಾಸ್‌ವರ್ಡ್ ಖಚಿತಪಡಿಸಿ',
+          showPass: 'ತೋರಿಸಿ',
+          hidePass: 'ಮರೆಮಾಚಿ',
+          loginTab: 'ಲಾಗಿನ್ ಮಾಡಿ',
+          signupTab: 'ಖಾತೆ ತೆರೆಯಿರಿ',
+          loginBtn: 'ಲಾಗಿನ್ ಮಾಡಿ',
+          createAccountBtn: 'ಹೊಸ ಖಾತೆ ತೆರೆಯಿರಿ',
+          forgotPassBtn: 'ಪಾಸ್‌ವರ್ಡ್ ಮರೆತಿದೆಯೇ?',
+          noAccount: 'ಖಾತೆ ಇಲ್ಲವೇ?',
+          createAccountLink: 'ಖಾತೆ ತೆರೆಯಿರಿ',
+          invalidCreds: 'ದಯವಿಟ್ಟು ಮಾನ್ಯವಾದ ಇಮೇಲ್ ಮತ್ತು ಪಾಸ್‌ವರ್ಡ್ ನಮೂದಿಸಿ.',
+          loginSuccess: 'ಯಶಸ್ವಿಯಾಗಿ ಲಾಗಿನ್ ಮಾಡಲಾಗಿದೆ!',
+          logoutSuccess: 'ಯಶಸ್ವಿಯಾಗಿ ಲಾಗ್ ಔಟ್ ಮಾಡಲಾಗಿದೆ.',
+          resetPassTitle: 'ಪಾಸ್‌ವರ್ಡ್ ಮರುಸೂಚನೆ',
+          resetPassSub: 'ಸ್ಥಳೀಯ ಮೋಡ್ ಸೂಚನೆ: ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿ ಸುರಕ್ಷಿತವಾಗಿ ಸಂಗ್ರಹಿಸಲಾಗಿದೆ.',
+          currentPassLabel: 'ಪ್ರಸ್ತುತ ಪಾಸ್‌ವರ್ಡ್',
+          newPassLabel: 'ಹೊಸ ಪಾಸ್‌ವರ್ಡ್',
+          submitChangePass: 'ಪಾಸ್‌ವರ್ಡ್ ಅಪ್‌ಡೇಟ್ ಮಾಡಿ',
+          demoModeNotice: '🔐 ರಿಮೈಂಡರ್ ಸ್ಥಳೀಯ ಪ್ರದರ್ಶನ ಮೋಡ್‌ನಲ್ಲಿದೆ.'
+        },
+        common: {
+          cancel: 'ರದ್ದುಗೊಳಿಸಿ',
+          save: 'ಉಳಿಸಿ',
+          close: 'ಮುಚ್ಚಿ',
+          delete: 'ಅಳಿಸಿ',
+          edit: 'ಸಂಪಾದಿಸಿ',
+          confirm: 'ಖಚಿತಪಡಿಸಿ',
+          notSpecified: 'ನಮೂದಿಸಿಲ್ಲ',
+          noInstructions: 'ಪ್ರಕಟಣೆಯಲ್ಲಿ ಯಾವುದೇ ಅಧಿಕೃತ ಸೂಚನೆಗಳು ಕಂಡುಬಂದಿಲ್ಲ.',
+          successToast: 'ಕ್ರಿಯೆ ಯಶಸ್ವಿಯಾಗಿ ಪೂರ್ಣಗೊಂಡಿದೆ!',
+          errorToast: 'ದೋಷ ಸಂಭವಿಸಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.'
+        }
+      }
+    };
+
+    let currentLang = 'en';
+
+    function t(path, params = {}) {
+      const keys = path.split('.');
+      let current = i18nDict[currentLang] || i18nDict.en;
+      for (const k of keys) {
+        if (current && current[k] !== undefined) {
+          current = current[k];
+        } else {
+          let fallback = i18nDict.en;
+          for (const fk of keys) {
+            if (fallback && fallback[fk] !== undefined) {
+              fallback = fallback[fk];
+            } else {
+              return path;
+            }
+          }
+          current = fallback;
+          break;
+        }
+      }
+      if (typeof current === 'string') {
+        let result = current;
+        for (const [pKey, pVal] of Object.entries(params)) {
+          result = result.replace(new RegExp(`\\{${pKey}\\}`, 'g'), pVal);
+        }
+        return result;
+      }
+      return current;
+    }
+
+    function formatInstructionsAsBullets(instText) {
+      if (!instText || typeof instText !== 'string' || !instText.trim()) {
+        return `<p class="text-slate-400 italic text-xs">${t('common.noInstructions')}</p>`;
+      }
+
+      let cleaned = instText
+        .replace(/^#+\s+/gm, '')
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/\*([^*]+)\*/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/~~([^~]+)~~/g, '$1');
+
+      let rawItems = [];
+
+      if (cleaned.includes('\n')) {
+        rawItems = cleaned.split(/\n+/);
+      } else {
+        const numberedOrBulleted = cleaned.split(/(?:\s*[\;\•\-\*]\s+|\s*\b\d+[\.\)]\s+)/);
+        if (numberedOrBulleted.length > 1) {
+          rawItems = numberedOrBulleted;
+        } else {
+          const sentences = cleaned.split(/(?<=\.)\s+(?=[A-Z0-9])/);
+          if (sentences.length > 1) {
+            rawItems = sentences;
+          } else {
+            rawItems = [cleaned];
+          }
+        }
+      }
+
+      const finalBullets = [];
+      rawItems.forEach(item => {
+        let text = item.trim();
+        text = text.replace(/^[\*\-\•\d+\.\)\s]+/, '').trim();
+        if (text.length > 0) {
+          finalBullets.push(text);
+        }
+      });
+
+      if (finalBullets.length === 0) {
+        return `<p class="text-slate-400 italic text-xs">${t('common.noInstructions')}</p>`;
+      }
+
+      return `
+        <ul class="space-y-1.5 text-slate-700 dark:text-slate-300 text-xs">
+          ${finalBullets.map(bullet => `
+            <li class="flex items-start gap-2.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 mt-1.5"></span>
+              <span class="font-medium leading-relaxed text-xs">${bullet}</span>
+            </li>
+          `).join('')}
+        </ul>
+      `;
+    }
+
+    // MULTI-ACCOUNT ISOLATED STORAGE TEMPLATES
+    function createDefaultAccountData(email, displayName, college) {
+      return {
+        profile: {
+          displayName: displayName || 'Student',
+          email: email,
+          college: college || 'Northstar Institute of Technology',
+          course: 'Bachelor of Computer Applications (BCA)',
+          department: 'Computer Applications',
+          year: '2',
+          semester: '3',
+          language: 'en'
+        },
+        circulars: [
+          { id: 'SPORTS-2026-001', title: 'Inter-Department Sports Fest 2026', department: 'Physical Education', issueDate: '2026-10-12', eventDate: '2026-10-24', eventTime: '09:00 AM', venue: 'Main Sports Ground', deadline: '2026-10-20', fee: '₹ 150', eligibility: 'All Students', status: 'Active', version: '1.0', category: 'Sports', instructions: '1. Mandatory college student ID card required at entry.\n2. Registration fees must be submitted before deadline.\n3. Team sports require list of participants signed by HOD.' },
+          { id: 'HACK-2026-002', title: 'CodeStorm 2026 — Student Hackathon', department: 'Computer Science', issueDate: '2026-10-13', eventDate: '2026-10-31', eventTime: '10:00 AM', venue: 'Innovation & Computing Lab', deadline: '2026-10-25', fee: '₹ 300 per team', eligibility: 'BCA / BTech / MCA', status: 'Active', version: '1.0', category: 'Hackathon', instructions: '• Team size must be between 2 and 4 students.\n• Project abstract must be submitted prior to Oct 25.\n• Bring personal laptops.' },
+          { id: 'EXAM-2026-003', title: 'Semester Examination Fee Payment Notice', department: 'Examination Section', issueDate: '2026-10-14', eventDate: '2026-10-28', eventTime: '04:00 PM', venue: 'Examination Section Counter', deadline: '2026-10-28', fee: '₹ 1,250', eligibility: 'Regular Students', status: 'Active', version: '1.0', category: 'Exams', instructions: 'Clear all library dues before fee payment.\nLate fee penalty applies after deadline.' }
+        ],
+        events: [
+          { id: 'EVT-1', title: 'Inter-Department Sports Fest', date: '2026-10-24', time: '09:00 AM', category: 'Sports', venue: 'Main Sports Ground', circularId: 'SPORTS-2026-001' },
+          { id: 'EVT-2', title: 'CodeStorm 2026 Hackathon', date: '2026-10-31', time: '10:00 AM', category: 'Hackathon', venue: 'Computing Lab', circularId: 'HACK-2026-002' }
+        ],
+        actions: [
+          { id: 'ACT-1', title: 'Register for Sports Fest', dueDate: '2026-10-20', completed: false, circularId: 'SPORTS-2026-001', category: 'Sports', priority: 'High', description: 'Complete registration at Physical Education desk.' },
+          { id: 'ACT-2', title: 'Register for CodeStorm Hackathon', dueDate: '2026-10-25', completed: false, circularId: 'HACK-2026-002', category: 'Hackathon', priority: 'High', description: 'Submit team registration form.' },
+          { id: 'ACT-3', title: 'Pay Semester Examination Fee', dueDate: '2026-10-28', completed: false, circularId: 'EXAM-2026-003', category: 'Exams', priority: 'High', description: 'Clear ₹ 1,250 exam fee at counter.' }
+        ],
+        checklists: [
+          {
+            id: 'CHK-1',
+            title: 'Sports Fest Checklist',
+            circularId: 'SPORTS-2026-001',
+            items: [
+              { id: 'i1', text: 'Select a sport category', done: true },
+              { id: 'i2', text: 'Complete registration fee payment', done: false },
+              { id: 'i3', text: 'Bring college student ID card', done: false }
+            ]
+          }
+        ],
+        fees: [
+          { id: 'FEE-1', title: 'Sports Fest Registration Fee', amount: '₹ 150', dueDate: '2026-10-20', status: 'Pending', circularId: 'SPORTS-2026-001' },
+          { id: 'FEE-2', title: 'CodeStorm Hackathon Entry Fee', amount: '₹ 300 per team', dueDate: '2026-10-25', status: 'Pending', circularId: 'HACK-2026-002' },
+          { id: 'FEE-3', title: 'Semester Examination Fee', amount: '₹ 1,250', dueDate: '2026-10-28', status: 'Pending', circularId: 'EXAM-2026-003' }
+        ],
+        notifications: [
+          { id: 'N1', title: 'Sports Fest Deadline Approaching', message: 'Sports registration closes on Oct 20.', time: '1 hr ago', unread: true, circularId: 'SPORTS-2026-001' },
+          { id: 'N2', title: 'CodeStorm Registration Closing Soon', message: 'Hackathon registration closes on Oct 25.', time: '1 day ago', unread: false, circularId: 'HACK-2026-002' }
+        ],
+        revisionHistory: [
+          { revisionId: 'REV-101', circularId: 'SPORTS-2026-001', title: 'Inter-Department Sports Fest 2026', version: '1.0', updatedAt: '2026-10-12 10:00 AM', summary: 'Initial publication of official sports circular.' }
+        ]
+      };
+    }
+
+    // INITIAL SEED APP DATA WITH ACCOUNTS AND STORE MAP
+    const INITIAL_SEED_DATA = {
+      accounts: [
+        { email: 'aarav.sharma@example.com', passwordHash: 'demo123', displayName: 'Aarav Sharma', college: 'Northstar Institute of Technology' },
+        { email: 'priya.patel@example.com', passwordHash: 'demo123', displayName: 'Priya Patel', college: 'Bengaluru Technical Institute' }
+      ],
+      activeAccountEmail: 'aarav.sharma@example.com',
+      userStores: {
+        'aarav.sharma@example.com': createDefaultAccountData('aarav.sharma@example.com', 'Aarav Sharma', 'Northstar Institute of Technology'),
+        'priya.patel@example.com': createDefaultAccountData('priya.patel@example.com', 'Priya Patel', 'Bengaluru Technical Institute')
+      }
+    };
+
+    let appData = JSON.parse(localStorage.getItem(STORAGE_KEY)) || INITIAL_SEED_DATA;
+
+    // Ensure appData.userStores exists
+    if (!appData.userStores) {
+      appData.userStores = {
+        'aarav.sharma@example.com': createDefaultAccountData('aarav.sharma@example.com', 'Aarav Sharma', 'Northstar Institute of Technology')
+      };
+    }
+
+    // Session authentication state
+    let isAuthenticated = localStorage.getItem('remyndr_authenticated') === 'true';
+    let storedActiveEmail = localStorage.getItem('remyndr_active_email') || appData.activeAccountEmail || 'aarav.sharma@example.com';
+
+    // Account Switcher and Synchronization Helper
+    function switchActiveAccount(email) {
+      const normalized = (email || '').toLowerCase().trim();
+      let account = appData.accounts.find(a => a.email.toLowerCase() === normalized);
+      
+      if (!account) {
+        // Fallback to first available account
+        account = appData.accounts[0] || { email: 'aarav.sharma@example.com', displayName: 'Aarav Sharma', college: 'Northstar Institute' };
+      }
+
+      appData.activeAccountEmail = account.email;
+      localStorage.setItem('remyndr_active_email', account.email);
+
+      // Initialize store if missing for this account
+      if (!appData.userStores[account.email]) {
+        appData.userStores[account.email] = createDefaultAccountData(account.email, account.displayName, account.college);
+      }
+
+      const activeStore = appData.userStores[account.email];
+      appData.profile = activeStore.profile;
+      appData.circulars = activeStore.circulars;
+      appData.events = activeStore.events;
+      appData.actions = activeStore.actions;
+      appData.checklists = activeStore.checklists;
+      appData.fees = activeStore.fees;
+      appData.notifications = activeStore.notifications;
+      appData.revisionHistory = activeStore.revisionHistory;
+
+      if (appData.profile && appData.profile.language) {
+        currentLang = appData.profile.language;
+      }
+
+      updateProfileNav();
+      updateBadgeCounters();
+    }
+
+    // Load current active account
+    switchActiveAccount(storedActiveEmail);
+
+
+    // Supabase task persistence: map the app's existing action objects to public.tasks.
+    let taskSyncRunning = false;
+
+    async function syncTasksToSupabase() {
+      if (taskSyncRunning || !window.supabase) return;
+      taskSyncRunning = true;
+      try {
+        const { data: authData, error: authError } = await supabaseClient.auth.getUser();
+        if (authError || !authData?.user) return;
+        const userId = authData.user.id;
+
+        for (const task of (appData.actions || [])) {
+          const payload = {
+            user_id: userId,
+            title: task.title || 'Untitled task',
+            due_date: task.dueDate || null,
+            completed: Boolean(task.completed),
+            // Circular references in this app use labels like SPORTS-2026-001, not UUIDs.
+            // Leave the optional database UUID reference empty until circulars have UUID mapping.
+            circular_id: null,
+            category: task.category || null,
+            priority: task.priority || 'Medium',
+            description: task.description || null,
+            completed_at: task.completedAt || null
+          };
+
+          const isUuid = typeof task.id === 'string' &&
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(task.id);
+
+          if (isUuid) {
+            const { error } = await supabaseClient
+              .from('tasks')
+              .update(payload)
+              .eq('id', task.id)
+              .eq('user_id', userId);
+            if (error) {
+              console.error('Could not update task in Supabase:', error);
+              showToast(`Task sync failed: ${error.message}`, 'error');
+            }
+          } else {
+            const { data, error } = await supabaseClient
+              .from('tasks')
+              .insert(payload)
+              .select('id')
+              .single();
+            if (error) {
+              console.error('Could not save task to Supabase:', error);
+              showToast(`Task save failed: ${error.message}`, 'error');
+            } else if (data?.id) {
+              task.id = data.id;
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Unexpected task sync error:', err);
+      } finally {
+        taskSyncRunning = false;
+      }
+    }
+
+    async function loadTasksFromSupabase(showMessage = false) {
+      try {
+        const { data: authData, error: authError } = await supabaseClient.auth.getUser();
+        if (authError || !authData?.user) return false;
+
+        const { data: rows, error } = await supabaseClient
+          .from('tasks')
+          .select('*')
+          .eq('user_id', authData.user.id)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Supabase task load failed:', error);
+          if (showMessage) showToast(`Could not load tasks: ${error.message}`, 'error');
+          return false;
+        }
+
+        // Existing local demo tasks are retained only when this account has no database tasks yet.
+        if (rows && rows.length > 0) {
+          appData.actions = rows.map(row => ({
+            id: row.id,
+            title: row.title || 'Untitled task',
+            dueDate: row.due_date || '',
+            completed: Boolean(row.completed),
+            circularId: row.circular_id || null,
+            category: row.category || 'General',
+            priority: row.priority || 'Medium',
+            description: row.description || '',
+            completedAt: row.completed_at || null
+          }));
+        } else {
+          await syncTasksToSupabase();
+        }
+
+        if (showMessage) showToast(`Loaded ${(rows || []).length} task(s) from Supabase.`);
+        return true;
+      } catch (err) {
+        console.error('Unexpected error loading tasks:', err);
+        if (showMessage) showToast('Could not load tasks from Supabase.', 'error');
+        return false;
+      }
+    }
+
+    function saveAppData() {
+      // Sync active top-level pointers back into current account store
+      if (appData.activeAccountEmail && appData.userStores[appData.activeAccountEmail]) {
+        appData.userStores[appData.activeAccountEmail] = {
+          profile: appData.profile,
+          circulars: appData.circulars,
+          events: appData.events,
+          actions: appData.actions,
+          checklists: appData.checklists,
+          fees: appData.fees,
+          notifications: appData.notifications,
+          revisionHistory: appData.revisionHistory
+        };
+      }
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+      updateBadgeCounters();
+      updateProfileNav();
+      // Persist task changes without blocking the UI.
+      void syncTasksToSupabase();
+    }
+
+
+    // Load this user's circulars from Supabase and merge them into the app view.
+    // Sign out from Supabase and clear the app's local authentication flag.
+    // This function is used by both logout buttons in the header/sidebar.
+    async function logoutUser() {
+      try {
+        const { error } = await supabaseClient.auth.signOut();
+        if (error) {
+          console.error('Supabase sign-out failed:', error);
+          showToast(`Could not log out: ${error.message}`, 'error');
+          return;
+        }
+
+        isAuthenticated = false;
+        localStorage.removeItem('remyndr_authenticated');
+        localStorage.removeItem('remyndr_active_email');
+        currentRoute = 'login';
+        window.location.hash = 'login';
+
+        // Hide authenticated navigation immediately and render the login screen.
+        const header = document.getElementById('mainHeader');
+        const sidebar = document.getElementById('sidebar');
+        if (header) header.classList.add('hidden');
+        if (sidebar) sidebar.classList.add('hidden');
+        renderHeaderControls();
+        renderPage();
+        showToast('Logged out successfully.');
+      } catch (err) {
+        console.error('Unexpected sign-out error:', err);
+        showToast('Could not log out. Please try again.', 'error');
+      }
+    }
+
+    async function loadCircularsFromSupabase(showMessage = false) {
+      try {
+        const { data: authData, error: authError } = await supabaseClient.auth.getUser();
+        if (authError || !authData?.user) {
+          if (showMessage) showToast('Please log in again to load your saved circulars.', 'error');
+          return false;
+        }
+
+        const { data: rows, error } = await supabaseClient
+          .from('circulars')
+          .select('*')
+          .eq('user_id', authData.user.id)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Supabase circular load failed:', error);
+          if (showMessage) showToast(`Could not load circulars: ${error.message}`, 'error');
+          return false;
+        }
+
+        const databaseCirculars = (rows || []).map(row => ({
+          id: row.id,
+          title: row.title || 'Untitled Circular',
+          department: row.department || 'General',
+          issueDate: row.issue_date || '',
+          eventDate: row.event_date || '',
+          eventTime: row.event_time || '',
+          deadline: row.deadline || '',
+          venue: row.venue || '',
+          fee: row.fee || 'Free',
+          eligibility: row.eligibility || '',
+          status: row.status || 'Active',
+          version: row.version || '1.0',
+          category: row.category || 'General',
+          instructions: row.instructions || '',
+          rawContent: row.raw_content || ''
+        }));
+
+        const existingCirculars = appData.circulars || [];
+        const databaseIds = new Set(databaseCirculars.map(item => String(item.id)));
+        const localOnlyCirculars = existingCirculars.filter(item => !databaseIds.has(String(item.id)));
+
+        appData.circulars = [...databaseCirculars, ...localOnlyCirculars];
+        saveAppData();
+
+        // Refresh the visible page after the database results arrive.
+        renderPage();
+        if (showMessage) showToast(`Loaded ${databaseCirculars.length} circular(s) from Supabase.`);
+        return true;
+      } catch (err) {
+        console.error('Unexpected error loading circulars:', err);
+        if (showMessage) showToast('Could not load circulars from Supabase.', 'error');
+        return false;
+      }
+    }
+
+    function updateBadgeCounters() {
+      const unread = (appData.notifications || []).filter(n => n.unread).length;
+      const badge = document.getElementById('notifBadge');
+      if (badge) {
+        if (unread > 0) badge.classList.remove('hidden');
+        else badge.classList.add('hidden');
+      }
+    }
+
+    function updateProfileNav() {
+      const nameEl = document.getElementById('navProfileName');
+      const subEl = document.getElementById('navProfileSub');
+      const avatarEl = document.getElementById('navAvatar');
+      if (nameEl && appData.profile) {
+        nameEl.innerText = appData.profile.displayName || 'Student';
+        if (subEl) subEl.innerText = appData.profile.college || 'Campus';
+        if (avatarEl) {
+          const initials = (appData.profile.displayName || 'AS').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+          avatarEl.innerText = initials || 'ST';
+        }
+      }
+    }
+
+    function initStationeryBackground() {
+      const container = document.getElementById('stationeryBackground');
+      if (!container) return;
+      container.innerHTML = '';
+      const icons = ['file-text', 'pen-tool', 'paperclip', 'book-open', 'calendar', 'check-circle-2', 'folder', 'bookmark', 'award', 'sparkles'];
+      const count = window.innerWidth < 768 ? 14 : 28;
+
+      for (let i = 0; i < count; i++) {
+        const iconName = icons[i % icons.length];
+        const top = Math.floor(Math.random() * 95);
+        const left = Math.floor(Math.random() * 95);
+        const animClass = `anim-float-${(i % 3) + 1}`;
+        const delay = (i * 0.6).toFixed(1);
+
+        const el = document.createElement('div');
+        el.className = `absolute p-3 rounded-2xl bg-slate-200/50 dark:bg-slate-800/50 border border-slate-300/30 dark:border-slate-700/30 text-slate-600 dark:text-slate-400 ${animClass}`;
+        el.style.top = `${top}%`;
+        el.style.left = `${left}%`;
+        el.style.animationDelay = `${delay}s`;
+        el.innerHTML = `<i data-lucide="${iconName}" class="w-5 h-5"></i>`;
+        container.appendChild(el);
+      }
+      lucide.createIcons();
+    }
+
+    // NAVIGATION ROUTES
+    const routes = [
+      { id: 'dashboard', labelKey: 'nav.dashboard', icon: 'layout-dashboard' },
+      { id: 'circulars', labelKey: 'nav.circulars', icon: 'file-text' },
+      { id: 'actions', labelKey: 'nav.actions', icon: 'check-square' },
+      { id: 'deadlines', labelKey: 'nav.deadlines', icon: 'clock' },
+      { id: 'completed', labelKey: 'nav.completed', icon: 'check-circle' },
+      { id: 'calendar', labelKey: 'nav.calendar', icon: 'calendar' },
+      { id: 'checklists', labelKey: 'nav.checklists', icon: 'list-checks' },
+      { id: 'assistant', labelKey: 'nav.assistant', icon: 'bot' },
+      { id: 'updates', labelKey: 'nav.updates', icon: 'refresh-cw' },
+      { id: 'fees', labelKey: 'nav.fees', icon: 'credit-card' },
+      { id: 'notifications', labelKey: 'nav.notifications', icon: 'bell' },
+      { id: 'profile', labelKey: 'nav.profile', icon: 'user' },
+      { id: 'settings', labelKey: 'nav.settings', icon: 'settings' }
+    ];
+
+    let currentRoute = 'dashboard';
+    let currentTaskFilter = 'all';
+
+    function renderSidebarNav() {
+      const navContainer = document.getElementById('sidebarNav');
+      if (!navContainer) return;
+      navContainer.innerHTML = '';
+
+      document.getElementById('sidebarWorkspaceLabel').innerText = t('workspaceLabel');
+
+      routes.forEach(r => {
+        const isActive = currentRoute === r.id;
+        const btn = document.createElement('a');
+        btn.href = `#${r.id}`;
+        btn.className = `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+          isActive 
+            ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20 dark:bg-blue-600' 
+            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+        }`;
+        btn.innerHTML = `<i data-lucide="${r.icon}" class="w-4 h-4"></i><span>${t(r.labelKey)}</span>`;
+        btn.onclick = () => {
+          if (window.innerWidth < 1024) {
+            document.getElementById('sidebar').classList.add('-translate-x-full');
+          }
+        };
+        navContainer.appendChild(btn);
+      });
+      lucide.createIcons();
+    }
+
+    function renderHeaderControls() {
+      const headerSearch = document.getElementById('headerSearchWrapper');
+      const notifBtn = document.getElementById('notifBellBtn');
+      const profileNav = document.getElementById('navProfileWrapper');
+      const logoutBtnLabel = document.getElementById('logoutBtnLabel');
+
+      if (logoutBtnLabel) logoutBtnLabel.innerText = t('logout');
+
+      if (!isAuthenticated) {
+        if (headerSearch) headerSearch.classList.add('hidden');
+        if (notifBtn) notifBtn.classList.add('hidden');
+        if (profileNav) profileNav.classList.add('hidden');
+      } else {
+        if (headerSearch) headerSearch.classList.remove('hidden');
+        if (notifBtn) notifBtn.classList.remove('hidden');
+        if (profileNav) profileNav.classList.remove('hidden');
+      }
+    }
+
+    function navigateTo(routeId, extraParam = null) {
+      if (!isAuthenticated && routeId !== 'login') {
+        routeId = 'login';
+      }
+      if (extraParam) currentTaskFilter = extraParam;
+      currentRoute = routeId;
+      window.location.hash = routeId;
+      renderSidebarNav();
+      renderHeaderControls();
+      renderPage();
+    }
+
+    window.addEventListener('hashchange', () => {
+      const hash = window.location.hash.replace('#', '') || 'dashboard';
+      if (!isAuthenticated && hash !== 'login') {
+        navigateTo('login');
+      } else {
+        currentRoute = hash;
+        renderSidebarNav();
+        renderHeaderControls();
+        renderPage();
+      }
+    });
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl text-xs font-bold text-white transition-all transform translate-y-0 ${
+        type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'
+      }`;
+      toast.innerHTML = `<i data-lucide="${type === 'success' ? 'check-circle' : 'alert-circle'}" class="w-4 h-4"></i><span>${message}</span>`;
+      container.appendChild(toast);
+      lucide.createIcons();
+      setTimeout(() => { toast.remove(); }, 3500);
+    }
+
+    function openModal(contentHtml) {
+      const overlay = document.getElementById('modalOverlay');
+      const box = document.getElementById('modalBox');
+      box.innerHTML = contentHtml;
+      overlay.classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeModal() {
+      document.getElementById('modalOverlay').classList.add('hidden');
+    }
+
+    document.getElementById('modalOverlay').addEventListener('click', (e) => {
+      if (e.target.id === 'modalOverlay') closeModal();
+    });
+
+    function changeLang(val) {
+      currentLang = val;
+      appData.profile.language = val;
+      saveAppData();
+      document.getElementById('langSelect').value = val;
+      document.getElementById('brandTaglineEl').innerText = t('brandTagline');
+      document.getElementById('globalSearchInput').placeholder = t('searchPlaceholder');
+      renderSidebarNav();
+      renderHeaderControls();
+      renderPage();
+    }
+
+    function renderPage() {
+      const main = document.getElementById('mainContainer');
+      const mainHeader = document.getElementById('mainHeader');
+      const sidebar = document.getElementById('sidebar');
+
+      if (!main) return;
+      main.innerHTML = '';
+
+      if (!isAuthenticated) {
+        if (mainHeader) mainHeader.classList.add('hidden');
+        if (sidebar) sidebar.classList.add('hidden');
+        renderLoginPage(main);
+        lucide.createIcons();
+        return;
+      } else {
+        if (mainHeader) mainHeader.classList.remove('hidden');
+        if (sidebar) sidebar.classList.remove('hidden');
+      }
+
+      switch (currentRoute) {
+        case 'dashboard': renderDashboard(main); break;
+        case 'circulars': renderAllCircularsPage(main); break;
+        case 'actions': renderActionsPage(main); break;
+        case 'deadlines': renderDeadlinesPage(main); break;
+        case 'completed': renderCompletedTasksPage(main); break;
+        case 'calendar': renderCalendarPage(main); break;
+        case 'checklists': renderChecklistsPage(main); break;
+        case 'assistant': renderAssistantPage(main); break;
+        case 'updates': renderCircularUpdatesPage(main); break;
+        case 'fees': renderFeeTrackerPage(main); break;
+        case 'notifications': renderNotificationsPage(main); break;
+        case 'profile': renderProfilePage(main); break;
+        case 'settings': renderSettingsPage(main); break;
+        case 'login': renderLoginPage(main); break;
+        default: renderDashboard(main);
+      }
+      lucide.createIcons();
+      updateBadgeCounters();
+    }
+
+    function renderDashboard(container) {
+      const pendingActions = appData.actions.filter(a => !a.completed);
+      const completedActions = appData.actions.filter(a => a.completed);
+      const pendingFees = appData.fees.filter(f => f.status === 'Pending');
+
+      container.innerHTML = `
+        <div class="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white p-6 lg:p-8 shadow-xl">
+          <div class="relative z-10 max-w-2xl space-y-3">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+              <span>${t('dashboard.welcome')}, ${appData.profile.displayName}!</span>
+            </div>
+            <h1 class="text-2xl lg:text-3xl font-black tracking-tight">${t('dashboard.subtitle')}</h1>
+            <p class="text-xs lg:text-sm text-blue-100 font-medium">
+              ${t('dashboard.summaryBanner', { pendingActions: pendingActions.length, eventsCount: appData.events.length, pendingFees: pendingFees.length })}
+            </p>
+            <div class="pt-2 flex flex-wrap items-center gap-3">
+              <button onclick="openUploadCircularModal()" class="px-5 py-2.5 rounded-xl bg-white text-blue-600 text-xs font-bold hover:bg-blue-50 transition shadow-lg flex items-center gap-2">
+                <i data-lucide="upload" class="w-4 h-4"></i> ${t('dashboard.addNoticeBtn')}
+              </button>
+              <button onclick="navigateTo('calendar')" class="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold transition">
+                ${t('dashboard.viewCalendarBtn')}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div onclick="navigateTo('circulars')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2 cursor-pointer hover:border-blue-500 transition group">
+            <div class="flex items-center justify-between text-blue-600">
+              <i data-lucide="file-text" class="w-5 h-5 group-hover:scale-110 transition-transform"></i>
+              <span class="text-2xl font-black text-slate-900 dark:text-slate-100">${appData.circulars.length}</span>
+            </div>
+            <p class="text-xs font-bold text-slate-500">${t('dashboard.totalCirculars')}</p>
+          </div>
+
+          <div onclick="navigateTo('actions', 'pending')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2 cursor-pointer hover:border-amber-500 transition group">
+            <div class="flex items-center justify-between text-amber-500">
+              <i data-lucide="check-square" class="w-5 h-5 group-hover:scale-110 transition-transform"></i>
+              <span class="text-2xl font-black text-slate-900 dark:text-slate-100">${pendingActions.length}</span>
+            </div>
+            <p class="text-xs font-bold text-slate-500">${t('dashboard.pendingActions')}</p>
+          </div>
+
+          <div onclick="navigateTo('calendar')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2 cursor-pointer hover:border-purple-500 transition group">
+            <div class="flex items-center justify-between text-purple-500">
+              <i data-lucide="calendar" class="w-5 h-5 group-hover:scale-110 transition-transform"></i>
+              <span class="text-2xl font-black text-slate-900 dark:text-slate-100">${appData.events.length}</span>
+            </div>
+            <p class="text-xs font-bold text-slate-500">${t('dashboard.upcomingEvents')}</p>
+          </div>
+
+          <div onclick="navigateTo('fees')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2 cursor-pointer hover:border-rose-500 transition group">
+            <div class="flex items-center justify-between text-rose-500">
+              <i data-lucide="credit-card" class="w-5 h-5 group-hover:scale-110 transition-transform"></i>
+              <span class="text-2xl font-black text-slate-900 dark:text-slate-100">${pendingFees.length}</span>
+            </div>
+            <p class="text-xs font-bold text-slate-500">${t('dashboard.pendingFees')}</p>
+          </div>
+
+          <div onclick="navigateTo('completed')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2 cursor-pointer hover:border-emerald-500 transition group">
+            <div class="flex items-center justify-between text-emerald-500">
+              <i data-lucide="check-circle-2" class="w-5 h-5 group-hover:scale-110 transition-transform"></i>
+              <span class="text-2xl font-black text-slate-900 dark:text-slate-100">${completedActions.length}</span>
+            </div>
+            <p class="text-xs font-bold text-slate-500">${t('dashboard.completedTasks')}</p>
+          </div>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <h3 class="text-base font-bold flex items-center gap-2">
+              <i data-lucide="clock" class="w-4 h-4 text-blue-500"></i>
+              <span>${t('dashboard.recentNotices')}</span>
+            </h3>
+            <button onclick="navigateTo('circulars')" class="text-xs font-bold text-blue-600 hover:underline">${t('dashboard.viewAll')}</button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            ${appData.circulars.slice(0, 4).map(c => `
+              <div onclick="openCircularDetailModal('${c.id}')" class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-2 cursor-pointer hover:border-blue-400 transition">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-extrabold px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">${c.id}</span>
+                  <span class="text-[10px] text-slate-400 font-semibold">${c.department}</span>
+                </div>
+                <h4 class="text-xs font-bold text-slate-800 dark:text-slate-200 line-clamp-1">${c.title}</h4>
+                <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                  <span>${t('circulars.eventDate')}: ${c.eventDate || t('common.notSpecified')}</span>
+                  <span class="font-bold text-amber-600 dark:text-amber-400">${t('circulars.deadline')}: ${c.deadline || t('common.notSpecified')}</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function openCircularDetailModal(circId) {
+      const c = appData.circulars.find(x => x.id === circId);
+      if (!c) return;
+
+      openModal(`
+        <div class="space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <span class="text-xs font-black bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 px-2.5 py-1 rounded-md">${c.id}</span>
+            <span class="text-xs font-bold text-slate-400">${t('circulars.version')} v${c.version}</span>
+          </div>
+
+          <h2 class="text-base font-extrabold text-slate-900 dark:text-slate-100">${c.title}</h2>
+          <p class="text-xs text-slate-500 font-semibold">${c.department} • ${t('circulars.issuedOn')} ${c.issueDate}</p>
+
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border">
+              <span class="text-[10px] text-slate-400 block font-bold">${t('circulars.eventDate')}</span>
+              <span class="font-bold">${c.eventDate || t('common.notSpecified')} ${c.eventTime ? '(' + c.eventTime + ')' : ''}</span>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border">
+              <span class="text-[10px] text-slate-400 block font-bold">${t('circulars.deadline')}</span>
+              <span class="font-bold text-amber-600">${c.deadline || t('common.notSpecified')}</span>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border">
+              <span class="text-[10px] text-slate-400 block font-bold">${t('circulars.venue')}</span>
+              <span class="font-bold">${c.venue || t('common.notSpecified')}</span>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border">
+              <span class="text-[10px] text-slate-400 block font-bold">${t('circulars.fee')}</span>
+              <span class="font-bold text-blue-600">${c.fee || 'Free'}</span>
+            </div>
+          </div>
+
+          <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-2">
+            <span class="font-bold text-xs block text-slate-800 dark:text-slate-200">${t('circulars.instructions')}</span>
+            ${formatInstructionsAsBullets(c.instructions)}
+          </div>
+
+          <div class="flex justify-end gap-2 pt-2">
+            <button onclick="closeModal()" class="px-4 py-2 rounded-xl border text-xs font-bold">${t('circulars.close')}</button>
+            <button onclick="closeModal(); navigateTo('updates')" class="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold">${t('circulars.reviseNotice')}</button>
+          </div>
+        </div>
+      `);
+    }
+
+    let currentUploadedFile = null;
+
+    function openUploadCircularModal() {
+      currentUploadedFile = null;
+      openModal(`
+        <div class="space-y-4 text-xs">
+          <div class="border-b pb-2">
+            <h3 class="text-base font-black">${t('upload.title')}</h3>
+            <p class="text-[11px] text-slate-500">${t('upload.subtitle')}</p>
+          </div>
+
+          <div class="p-5 border-2 border-dashed border-blue-300 dark:border-blue-800 rounded-2xl text-center bg-blue-50/40 dark:bg-blue-950/20 space-y-2">
+            <i data-lucide="file-up" class="w-8 h-8 mx-auto text-blue-600"></i>
+            <p class="font-bold text-slate-700 dark:text-slate-300">${t('upload.dropzoneTitle')}</p>
+            <input type="file" id="circularFileInput" accept=".pdf,.txt,.png,.jpg,.jpeg" class="hidden" onchange="handleFileSelect(this)" />
+            <button onclick="document.getElementById('circularFileInput').click()" class="px-4 py-1.5 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 transition">Browse File</button>
+            <div id="fileSelectedInfo" class="text-[11px] font-bold text-emerald-600 hidden mt-1"></div>
+          </div>
+
+          <div>
+            <label class="block font-bold mb-1">${t('upload.orPasteText')}</label>
+            <textarea id="pasteNoticeText" placeholder="Paste actual circular text..." class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" rows="4"></textarea>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-2">
+            <button onclick="closeModal()" class="px-4 py-2 rounded-xl border font-bold">${t('upload.cancelBtn')}</button>
+            <button id="extractNoticeBtn" onclick="processNoticeExtraction()" class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-2 transition">
+              <i id="extractBtnSpinner" data-lucide="loader-2" class="w-4 h-4 animate-spin hidden"></i>
+              <span id="extractBtnText">${t('upload.extractBtn')}</span>
+            </button>
+          </div>
+        </div>
+      `);
+    }
+
+    async function extractTextFromPDFBuffer(arrayBuffer) {
+      if (!window.pdfjsLib) return '';
+      try {
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdf = await loadingTask.promise;
+        let fullText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map(item => item.str).join(' ');
+          fullText += pageText + '\n';
+        }
+        return fullText.trim();
+      } catch (err) {
+        console.warn("PDF.js text extraction error:", err);
+        return '';
+      }
+    }
+
+    async function extractTextFromImage(dataUrl) {
+      if (!window.Tesseract) return '';
+      try {
+        const result = await Tesseract.recognize(dataUrl, 'eng');
+        return result.data.text || '';
+      } catch (err) {
+        console.warn("Tesseract OCR error:", err);
+        return '';
+      }
+    }
+
+    function handleFileSelect(input) {
+      if (!input.files || !input.files[0]) return;
+      const file = input.files[0];
+      const info = document.getElementById('fileSelectedInfo');
+      
+      const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
+      const isImg = file.type.startsWith('image/') || /\.(png|jpg|jpeg)$/i.test(file.name);
+      const isTxt = file.type === 'text/plain' || file.name.toLowerCase().endsWith('.txt');
+
+      if (!isPdf && !isImg && !isTxt) {
+        showToast(t('upload.invalidType'), 'error');
+        input.value = '';
+        return;
+      }
+
+      if (file.size > 12 * 1024 * 1024) {
+        showToast('File size exceeds 12MB limit.', 'error');
+        input.value = '';
+        return;
+      }
+
+      info.innerText = `${t('upload.fileSelected')} ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      info.classList.remove('hidden');
+
+      currentUploadedFile = {
+        name: file.name,
+        size: file.size,
+        type: isPdf ? 'application/pdf' : (isImg ? (file.type || 'image/jpeg') : 'text/plain'),
+        arrayBuffer: null,
+        base64Data: null,
+        textContent: ''
+      };
+
+      const reader = new FileReader();
+      if (isPdf) {
+        reader.onload = function(e) { currentUploadedFile.arrayBuffer = e.target.result; };
+        reader.readAsArrayBuffer(file);
+      } else if (isImg) {
+        reader.onload = function(e) {
+          const dataUrl = e.target.result;
+          currentUploadedFile.base64Data = dataUrl.split(',')[1];
+          currentUploadedFile.base64Url = dataUrl;
+        };
+        reader.readAsDataURL(file);
+      } else {
+        reader.onload = function(e) { currentUploadedFile.textContent = e.target.result; };
+        reader.readAsText(file);
+      }
+    }
+
+    async function processNoticeExtraction() {
+      const pasteText = document.getElementById('pasteNoticeText')?.value || '';
+      const extractBtn = document.getElementById('extractNoticeBtn');
+      const btnSpinner = document.getElementById('extractBtnSpinner');
+      const btnText = document.getElementById('extractBtnText');
+
+      if (!currentUploadedFile && !pasteText.trim()) {
+        return showToast('Please upload a file or paste notice text first.', 'error');
+      }
+
+      if (extractBtn) extractBtn.disabled = true;
+      if (btnSpinner) btnSpinner.classList.remove('hidden');
+      if (btnText) btnText.innerText = t('upload.extractingBtn');
+
+      try {
+        let extractedFields = null;
+        let rawSourceText = pasteText;
+
+        if (currentUploadedFile) {
+          if (currentUploadedFile.type === 'application/pdf' && currentUploadedFile.arrayBuffer) {
+            const pdfText = await extractTextFromPDFBuffer(currentUploadedFile.arrayBuffer);
+            if (pdfText && pdfText.length > 15) {
+              rawSourceText = pdfText + (pasteText ? '\n' + pasteText : '');
+              extractedFields = await callGeminiExtractFromText(rawSourceText);
+            } else if (currentUploadedFile.base64Data) {
+              extractedFields = await callGeminiExtractFromFile(currentUploadedFile.base64Data, currentUploadedFile.type, pasteText);
+            }
+          } else if (currentUploadedFile.base64Data) {
+            extractedFields = await callGeminiExtractFromFile(currentUploadedFile.base64Data, currentUploadedFile.type, pasteText);
+            if (!extractedFields && currentUploadedFile.base64Url) {
+              const ocrText = await extractTextFromImage(currentUploadedFile.base64Url);
+              rawSourceText = ocrText + (pasteText ? '\n' + pasteText : '');
+            }
+          } else if (currentUploadedFile.textContent) {
+            rawSourceText = currentUploadedFile.textContent + (pasteText ? '\n' + pasteText : '');
+            extractedFields = await callGeminiExtractFromText(rawSourceText);
+          }
+        } else {
+          extractedFields = await callGeminiExtractFromText(pasteText);
+        }
+
+        if (!extractedFields) {
+          extractedFields = extractNoticeFields(rawSourceText);
+        }
+
+        renderReviewFormModal(extractedFields, rawSourceText);
+      } catch (err) {
+        console.error('Extraction failure:', err);
+        const fallbackText = ((currentUploadedFile?.textContent || '') + '\n' + pasteText).trim();
+        const fallbackFields = extractNoticeFields(fallbackText);
+        renderReviewFormModal(fallbackFields, fallbackText || 'Extracted via fallback structure parser.');
+        showToast('Extracted document details via fallback parser.', 'success');
+      } finally {
+        if (extractBtn) extractBtn.disabled = false;
+        if (btnSpinner) btnSpinner.classList.add('hidden');
+        if (btnText) btnText.innerText = t('upload.extractBtn');
+      }
+    }
+
+    async function callGeminiExtractFromFile(base64Data, mimeType, additionalText = '') {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 9000);
+
+      try {
+        const prompt = `Analyze this college circular document image/PDF and extract details into JSON:
+- title (string: notice title)
+- refId (string: reference number or circular ID e.g. CIRC-1234)
+- dept (string: issuing department or authority)
+- issueDate (string: YYYY-MM-DD)
+- eventDate (string: YYYY-MM-DD for event date, else "")
+- eventTime (string: e.g. "10:00 AM", else "")
+- deadlineDate (string: YYYY-MM-DD for registration/submission/payment deadline, else "")
+- venue (string: venue or room, else "")
+- fee (string: fee amount e.g. "₹ 200" or "Free", else "")
+- eligibility (string: eligible students, else "")
+- instructions (string: official instructions as separate sentences or bullet items)
+${additionalText ? 'Additional context: ' + additionalText : ''}
+Return ONLY raw JSON object without markdown formatting.`;
+
+        const mime = mimeType.includes('pdf') ? 'application/pdf' : (mimeType.includes('png') ? 'image/png' : 'image/jpeg');
+
+        const payload = {
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType: mime, data: base64Data } }
+            ]
+          }],
+          generationConfig: { responseMimeType: "application/json" }
+        };
+
+        const apiKey = "";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+        const res = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+        if (!res.ok) return null;
+
+        const data = await res.json();
+        const textResp = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (textResp) {
+          const parsed = JSON.parse(textResp);
+          if (parsed.deadlineDate) parsed.deadlineDetected = true;
+          return parsed;
+        }
+      } catch (e) {
+        console.warn("Gemini file extraction fallback:", e);
+      } finally {
+        clearTimeout(timeoutId);
+      }
+      return null;
+    }
+
+    async function callGeminiExtractFromText(text) {
+      if (!text || text.length < 15) return null;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      try {
+        const prompt = `Extract structured circular info from text into JSON:
+${text}
+JSON schema: title, refId, dept, issueDate (YYYY-MM-DD), eventDate (YYYY-MM-DD or ""), eventTime, deadlineDate (YYYY-MM-DD or ""), venue, fee, eligibility, instructions (as concise sentences/bullet points).
+Return ONLY valid JSON object.`;
+
+        const payload = {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        };
+
+        const apiKey = "";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+        const res = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+        if (!res.ok) return null;
+
+        const data = await res.json();
+        const textResp = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (textResp) {
+          const parsed = JSON.parse(textResp);
+          if (parsed.deadlineDate) parsed.deadlineDetected = true;
+          return parsed;
+        }
+      } catch (e) {
+        console.warn("Gemini text extraction fallback:", e);
+      } finally {
+        clearTimeout(timeoutId);
+      }
+      return null;
+    }
+
+    function parseFlexibleDate(str) {
+      if (!str) return '';
+      const isoMatch = str.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+      if (isoMatch) return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+      
+      const dmyMatch = str.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+      if (dmyMatch) return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
+
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+      return '';
+    }
+
+    function extractNoticeFields(text) {
+      const fields = {
+        title: '',
+        refId: '',
+        dept: '',
+        issueDate: new Date().toISOString().split('T')[0],
+        eventDate: '',
+        eventTime: '',
+        deadlineDate: '',
+        venue: '',
+        fee: '',
+        eligibility: '',
+        instructions: text.slice(0, 400),
+        deadlineDetected: false
+      };
+
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length > 0) {
+        fields.title = lines[0].replace(/^(notice|subject|circular|re)[:\s]*/i, '').slice(0, 90);
+      }
+
+      const refMatch = text.match(/(?:ref|notice|circular|no|id)[:\.\s]*([A-Z0-9\-\/]{4,25})/i);
+      if (refMatch) fields.refId = refMatch[1];
+
+      const deptMatch = text.match(/(?:department|dept|issued by|organized by|office of)[:\s]*([A-Za-z\s]+)/i);
+      if (deptMatch) fields.dept = deptMatch[1].trim().slice(0, 40);
+
+      const deadlinePatterns = [
+        /(?:last\s+date|deadline|register\s+by|registration\s+closes|submit\s+by|submission\s+deadline|due\s+date|payment\s+due|paid\s+before|applications\s+close)[:\s]*([A-Za-z0-9\s,\/\-]+)/i,
+        /(?:due\s+on|before|by)[:\s]*(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}|\d{1,2}[-\/]\d{1,2}[-\/]\d{4})/i
+      ];
+
+      for (let pattern of deadlinePatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+          const parsedDate = parseFlexibleDate(match[1].trim());
+          if (parsedDate) {
+            fields.deadlineDate = parsedDate;
+            fields.deadlineDetected = true;
+            break;
+          }
+        }
+      }
+
+      const eventPatterns = [
+        /(?:event\s+date|held\s+on|date\s+of\s+event|scheduled\s+for|fest\s+date)[:\s]*([A-Za-z0-9\s,\/\-]+)/i
+      ];
+
+      for (let pattern of eventPatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+          const parsedDate = parseFlexibleDate(match[1].trim());
+          if (parsedDate) {
+            fields.eventDate = parsedDate;
+            break;
+          }
+        }
+      }
+
+      const timeMatch = text.match(/(?:time|at|timings)[:\s]*(\d{1,2}:\d{2}\s*(?:AM|PM)?|\d{1,2}\s*(?:AM|PM))/i);
+      if (timeMatch) fields.eventTime = timeMatch[1].toUpperCase();
+
+      const venueMatch = text.match(/(?:venue|location|room|hall|auditorium|place)[:\s]*([A-Za-z0-9\s,\-]+)/i);
+      if (venueMatch) fields.venue = venueMatch[1].trim().slice(0, 40);
+
+      const feeMatch = text.match(/(?:fee|amount|cost|charge)[:\s]*([₹\$Rs\.\d\s]+|free)/i);
+      if (feeMatch) fields.fee = feeMatch[1].trim().slice(0, 20);
+
+      const eligMatch = text.match(/(?:eligibility|eligible|open to|for students of)[:\s]*([A-Za-z0-9\s,\-]+)/i);
+      if (eligMatch) fields.eligibility = eligMatch[1].trim().slice(0, 40);
+
+      return fields;
+    }
+
+    function renderReviewFormModal(fields, rawSourceText) {
+      openModal(`
+        <div class="space-y-4 text-xs">
+          <div class="border-b pb-2">
+            <h3 class="text-base font-black">${t('upload.reviewTitle')}</h3>
+          </div>
+
+          <div>
+            <label class="block font-bold mb-1">${t('upload.noticeTitleLabel')}</label>
+            <input type="text" id="revTitle" value="${fields.title || ''}" placeholder="Notice Title" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none font-bold" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">${t('upload.refIdLabel')}</label>
+              <input type="text" id="revRef" value="${fields.refId || 'CIRC-' + Date.now().toString().slice(-4)}" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" />
+            </div>
+            <div>
+              <label class="block font-bold mb-1">${t('upload.deptLabel')}</label>
+              <input type="text" id="revDept" value="${fields.dept || ''}" placeholder="Department" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">${t('upload.eventDateLabel')}</label>
+              <input type="date" id="revEventDate" value="${fields.eventDate || ''}" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" />
+            </div>
+            <div>
+              <label class="block font-bold mb-1">${t('upload.deadlineLabel')}</label>
+              <input type="date" id="revDeadline" value="${fields.deadlineDate || ''}" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none font-bold text-amber-600" />
+            </div>
+          </div>
+
+          ${!fields.deadlineDetected && !fields.deadlineDate ? `
+            <div class="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 text-amber-700 dark:text-amber-300 font-bold">
+              ${t('upload.deadlineWarning')}
+            </div>
+          ` : ''}
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">${t('upload.venueLabel')}</label>
+              <input type="text" id="revVenue" value="${fields.venue || ''}" placeholder="Venue" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" />
+            </div>
+            <div>
+              <label class="block font-bold mb-1">${t('upload.feeLabel')}</label>
+              <input type="text" id="revFee" value="${fields.fee || ''}" placeholder="Fee e.g. ₹ 200 or Free" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-bold mb-1">${t('upload.instructionsLabel')}</label>
+            <textarea id="revInst" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" rows="3">${fields.instructions || ''}</textarea>
+          </div>
+
+          <div class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border space-y-1">
+            <span class="font-bold text-[10px] text-slate-400 uppercase">${t('upload.rawContentTitle')}</span>
+            <p class="text-[10px] text-slate-500 line-clamp-2">${rawSourceText}</p>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-2">
+            <button onclick="closeModal()" class="px-4 py-2 rounded-xl border font-bold">${t('upload.cancelBtn')}</button>
+            <button onclick="saveExtractedCircular()" class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition">${t('upload.saveAndSyncBtn')}</button>
+          </div>
+        </div>
+      `);
+    }
+
+    async function saveExtractedCircular() {
+      const title = document.getElementById('revTitle')?.value?.trim();
+      const ref = document.getElementById('revRef')?.value?.trim();
+      const dept = document.getElementById('revDept')?.value;
+      const evtDate = document.getElementById('revEventDate')?.value;
+      const deadline = document.getElementById('revDeadline')?.value;
+      const venue = document.getElementById('revVenue')?.value;
+      const fee = document.getElementById('revFee')?.value;
+      const eligibility = document.getElementById('revEligibility')?.value;
+      const inst = document.getElementById('revInst')?.value;
+
+      if (!title) return showToast('Notice title is required', 'error');
+
+      // Require a real Supabase session so the row is attached to the correct user.
+      const { data: authData, error: authError } = await supabaseClient.auth.getUser();
+      if (authError || !authData?.user) {
+        console.error('Supabase user check failed:', authError);
+        return showToast('Your session is not active. Please log in again.', 'error');
+      }
+
+      const user = authData.user;
+      const issueDate = new Date().toISOString().split('T')[0];
+      const newCirc = {
+        id: ref || `CIRC-${Date.now().toString().slice(-4)}`,
+        title,
+        department: dept || 'General',
+        issueDate,
+        eventDate: evtDate || '',
+        deadline: deadline || '',
+        venue: venue || '',
+        fee: fee || 'Free',
+        eligibility: eligibility || '',
+        status: 'Active',
+        version: '1.0',
+        category: 'General',
+        instructions: inst || ''
+      };
+
+      // Save the circular to Supabase first. The database generates its UUID id.
+      const { data: savedCircular, error: saveError } = await supabaseClient
+        .from('circulars')
+        .insert({
+          user_id: user.id,
+          title: newCirc.title,
+          department: newCirc.department,
+          issue_date: newCirc.issueDate,
+          event_date: newCirc.eventDate || null,
+          deadline: newCirc.deadline || null,
+          venue: newCirc.venue,
+          fee: newCirc.fee,
+          eligibility: newCirc.eligibility,
+          instructions: newCirc.instructions,
+          status: newCirc.status
+        })
+        .select('id')
+        .single();
+
+      if (saveError) {
+        console.error('Supabase circular insert failed:', saveError);
+        return showToast(`Could not save circular to database: ${saveError.message}`, 'error');
+      }
+
+      // Keep the database UUID as the circular ID so related records can refer to it.
+      newCirc.id = savedCircular.id;
+      appData.circulars.unshift(newCirc);
+
+      if (deadline) {
+        appData.actions.unshift({
+          id: `ACT-${Date.now()}`,
+          title: `${title} — Submission / Registration`,
+          dueDate: deadline,
+          completed: false,
+          circularId: newCirc.id,
+          priority: 'High',
+          description: inst
+        });
+      }
+
+      if (evtDate) {
+        appData.events.push({
+          id: `EVT-${Date.now()}`,
+          title,
+          date: evtDate,
+          category: 'Academics',
+          venue: venue || '',
+          circularId: newCirc.id
+        });
+      }
+
+      if (fee && fee.toLowerCase() !== 'free' && fee.toLowerCase() !== 'n/a' && fee !== '0') {
+        appData.fees.push({
+          id: `FEE-${Date.now()}`,
+          title,
+          amount: fee,
+          dueDate: deadline || evtDate || issueDate,
+          status: 'Pending',
+          circularId: newCirc.id
+        });
+      }
+      await syncTasksToSupabase();
+      saveAppData();
+      closeModal();
+      showToast(t('common.successToast'));
+      navigateTo('circulars');
+    }
+
+    let calendarMonth = 9; // October
+    let calendarYear = 2026;
+    let selectedDateStr = '2026-10-24';
+
+    function renderCalendarPage(container) {
+      container.innerHTML = `
+        <div class="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 shadow-xl border border-indigo-900/40">
+          <div class="absolute -right-6 -bottom-6 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
+          <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="space-y-1">
+              <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-[11px] font-bold">
+                <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
+                <span>Synced Campus Schedule</span>
+              </div>
+              <h1 class="text-2xl font-black tracking-tight">${t('calendar.title')}</h1>
+              <p class="text-xs text-slate-300 font-medium">${t('calendar.subtitle')}</p>
+            </div>
+            
+            <button onclick="openAddEventModal()" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-500/20 transition">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span>${t('calendar.addEventBtn')}</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+          <div class="flex items-center gap-3">
+            <h2 id="calMonthYearTitle" class="text-lg font-black text-slate-800 dark:text-slate-100"></h2>
+            <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
+              <button id="prevMonthBtn" class="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+              <button id="todayMonthBtn" class="px-3 py-1 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition">${t('calendar.today')}</button>
+              <button id="nextMonthBtn" class="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2 text-[10px] font-bold">
+            <span class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-300"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Academics</span>
+            <span class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-300"><span class="w-2 h-2 rounded-full bg-purple-500"></span> Hackathon</span>
+            <span class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-300"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Sports</span>
+            <span class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-300"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Deadlines</span>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm">
+          <div class="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-400 mb-2">
+            <div>${t('calendar.mon')}</div><div>${t('calendar.tue')}</div><div>${t('calendar.wed')}</div><div>${t('calendar.thu')}</div><div>${t('calendar.fri')}</div><div>${t('calendar.sat')}</div><div>${t('calendar.sun')}</div>
+          </div>
+          <div id="calendarGrid" class="grid grid-cols-7 gap-1.5"></div>
+        </div>
+      `;
+
+      renderCalendarGrid();
+
+      document.getElementById('prevMonthBtn').onclick = () => {
+        calendarMonth--; if (calendarMonth < 0) { calendarMonth = 11; calendarYear--; }
+        renderCalendarGrid();
+      };
+      document.getElementById('nextMonthBtn').onclick = () => {
+        calendarMonth++; if (calendarMonth > 11) { calendarMonth = 0; calendarYear++; }
+        renderCalendarGrid();
+      };
+      document.getElementById('todayMonthBtn').onclick = () => {
+        const today = new Date();
+        calendarMonth = today.getMonth();
+        calendarYear = today.getFullYear();
+        selectedDateStr = today.toISOString().split('T')[0];
+        renderCalendarGrid();
+      };
+    }
+
+    function renderCalendarGrid() {
+      const grid = document.getElementById('calendarGrid');
+      if (!grid) return;
+      grid.innerHTML = '';
+      
+      const monthNames = t('calendar.months');
+      document.getElementById('calMonthYearTitle').innerText = `${monthNames[calendarMonth]} ${calendarYear}`;
+
+      const firstDay = new Date(calendarYear, calendarMonth, 1).getDay();
+      const offset = (firstDay === 0 ? 6 : firstDay - 1);
+      const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      for (let i = 0; i < offset; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'h-20 lg:h-24 p-1 rounded-xl bg-slate-50/50 dark:bg-slate-800/20 opacity-40';
+        grid.appendChild(cell);
+      }
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateFormatted = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dayEvents = appData.events.filter(e => e.date === dateFormatted);
+        const dayActions = appData.actions.filter(a => a.dueDate === dateFormatted);
+        const isSelected = selectedDateStr === dateFormatted;
+        const isToday = todayStr === dateFormatted;
+
+        const cell = document.createElement('div');
+        cell.className = `h-20 lg:h-24 p-2 rounded-xl border transition cursor-pointer flex flex-col justify-between ${
+          isSelected 
+            ? 'border-blue-500 bg-blue-50/70 dark:bg-blue-950/50 ring-2 ring-blue-500/30 shadow-md' 
+            : (isToday ? 'border-indigo-400 bg-indigo-50/40 dark:bg-indigo-950/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300')
+        }`;
+
+        cell.onclick = () => {
+          selectedDateStr = dateFormatted;
+          renderCalendarGrid();
+          openDatePopUpModal(dateFormatted);
+        };
+
+        cell.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-black ${isToday ? 'px-1.5 py-0.5 rounded-md bg-indigo-600 text-white' : (isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-slate-700 dark:text-slate-300')}">${day}</span>
+            ${(dayEvents.length + dayActions.length > 0) ? `
+              <div class="flex items-center gap-1">
+                ${dayEvents.map(e => `<span class="w-1.5 h-1.5 rounded-full ${getCategoryDotColor(e.category)}"></span>`).join('')}
+                ${dayActions.length > 0 ? `<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>` : ''}
+              </div>
+            ` : ''}
+          </div>
+          <div class="space-y-1 overflow-hidden">
+            ${dayEvents.slice(0, 2).map(e => `
+              <div class="text-[9px] font-bold px-1.5 py-0.5 rounded truncate ${getCategoryBadgeStyle(e.category)}">${e.title}</div>
+            `).join('')}
+            ${dayActions.slice(0, 1).map(a => `
+              <div class="text-[9px] font-bold px-1.5 py-0.5 rounded truncate bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">Due: ${a.title}</div>
+            `).join('')}
+          </div>
+        `;
+        grid.appendChild(cell);
+      }
+    }
+
+    function getCategoryDotColor(cat = '') {
+      const lower = cat.toLowerCase();
+      if (lower.includes('sport')) return 'bg-emerald-500';
+      if (lower.includes('hack')) return 'bg-purple-500';
+      if (lower.includes('exam')) return 'bg-rose-500';
+      return 'bg-blue-500';
+    }
+
+    function getCategoryBadgeStyle(cat = '') {
+      const lower = cat.toLowerCase();
+      if (lower.includes('sport')) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300';
+      if (lower.includes('hack')) return 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300';
+      if (lower.includes('exam')) return 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300';
+      return 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300';
+    }
+
+    function openDatePopUpModal(dateStr) {
+      const matchingEvents = appData.events.filter(e => e.date === dateStr);
+      const matchingActions = appData.actions.filter(a => a.dueDate === dateStr);
+
+      let contentHtml = `
+        <div class="space-y-4 text-xs">
+          <div class="flex items-center justify-between border-b pb-3">
+            <div>
+              <span class="text-[10px] font-bold uppercase text-slate-400 block">Selected Schedule</span>
+              <h3 class="text-base font-black">${t('calendar.dateDetailsTitle', { date: dateStr })}</h3>
+            </div>
+            <button onclick="openAddEventModal('${dateStr}')" class="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition flex items-center gap-1.5">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              <span>${t('calendar.addEventForDate')}</span>
+            </button>
+          </div>
+      `;
+
+      if (matchingEvents.length === 0 && matchingActions.length === 0) {
+        contentHtml += `
+          <div class="text-center py-6 text-slate-400 space-y-2">
+            <i data-lucide="calendar-x" class="w-8 h-8 mx-auto"></i>
+            <p class="font-bold">${t('calendar.noEvents')}</p>
+          </div>
+        `;
+      } else {
+        matchingEvents.forEach(evt => {
+          contentHtml += `
+            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border flex items-center justify-between">
+              <div class="space-y-1">
+                <span class="text-[9px] font-extrabold px-2 py-0.5 rounded ${getCategoryBadgeStyle(evt.category)}">${evt.category || 'Event'}</span>
+                <h4 class="font-bold text-slate-800 dark:text-slate-100">${evt.title}</h4>
+                <p class="text-slate-500">📍 ${evt.venue || t('common.notSpecified')}</p>
+              </div>
+              ${evt.personal ? `<button onclick="deleteEvent('${evt.id}'); closeModal();" class="p-2 text-rose-500 hover:bg-rose-50 rounded-lg"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+            </div>
+          `;
+        });
+
+        matchingActions.forEach(act => {
+          contentHtml += `
+            <div onclick="openDeadlineDetailModal('${act.id}'); closeModal();" class="p-3.5 rounded-xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 cursor-pointer flex items-center justify-between hover:border-amber-400 transition">
+              <div class="space-y-1">
+                <span class="text-[9px] font-extrabold px-2 py-0.5 rounded bg-amber-100 text-amber-700">${t('actions.title')}</span>
+                <h4 class="font-bold">${act.title}</h4>
+                <p class="text-slate-500">Ref: ${act.circularId}</p>
+              </div>
+              <i data-lucide="chevron-right" class="w-4 h-4 text-amber-600"></i>
+            </div>
+          `;
+        });
+      }
+
+      contentHtml += `
+          <div class="flex justify-end pt-2 border-t">
+            <button onclick="closeModal()" class="px-4 py-2 rounded-xl border font-bold">${t('circulars.close')}</button>
+          </div>
+        </div>
+      `;
+
+      openModal(contentHtml);
+    }
+
+    function openAddEventModal(defaultDate = selectedDateStr) {
+      openModal(`
+        <div class="space-y-3 text-xs">
+          <h3 class="text-base font-black">${t('calendar.addEventBtn')}</h3>
+          <div>
+            <label class="block font-bold mb-1">Event Title</label>
+            <input type="text" id="mEvtTitle" placeholder="e.g. DBMS Semester Examination" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Date</label>
+              <input type="date" id="mEvtDate" value="${defaultDate}" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" />
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Category</label>
+              <select id="mEvtCat" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none">
+                <option value="Exams">Exams</option>
+                <option value="Academics">Academics</option>
+                <option value="Sports">Sports</option>
+                <option value="Personal">Personal</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block font-bold mb-1">Venue / Room</label>
+            <input type="text" id="mEvtVenue" placeholder="e.g. Hall 3" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" />
+          </div>
+          <div class="flex justify-end gap-2 pt-3">
+            <button onclick="closeModal()" class="px-4 py-2 rounded-xl border font-bold">${t('common.cancel')}</button>
+            <button onclick="savePersonalEvent()" class="px-5 py-2 rounded-xl bg-blue-600 text-white font-bold">${t('common.save')}</button>
+          </div>
+        </div>
+      `);
+    }
+
+    function savePersonalEvent() {
+      const title = document.getElementById('mEvtTitle')?.value;
+      const date = document.getElementById('mEvtDate')?.value;
+      const category = document.getElementById('mEvtCat')?.value;
+      const venue = document.getElementById('mEvtVenue')?.value;
+
+      if (!title) return showToast('Please enter an event title', 'error');
+
+      appData.events.push({ id: `EVT-${Date.now()}`, title, date, category, venue, personal: true });
+      saveAppData();
+      closeModal();
+      showToast(t('common.successToast'));
+      renderCalendarGrid();
+    }
+
+    function deleteEvent(id) {
+      appData.events = appData.events.filter(e => e.id !== id);
+      saveAppData();
+      showToast('Event deleted');
+      renderCalendarGrid();
+    }
+
+    function renderAssistantPage(container) {
+      container.innerHTML = `
+        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+          <h1 class="text-2xl font-black">${t('assistant.title')}</h1>
+          <p class="text-xs text-slate-500">${t('assistant.subtitle')}</p>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+          <div class="space-y-2">
+            <span class="text-xs font-bold text-slate-500">${t('assistant.suggestionsTitle')}</span>
+            <div class="flex flex-wrap gap-2">
+              <button onclick="askPreset('${t('assistant.suggestion1')}')" class="px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 text-blue-600 dark:text-blue-300 text-xs font-bold border border-blue-200 dark:border-blue-900 transition">
+                ${t('assistant.suggestion1')}
+              </button>
+              <button onclick="askPreset('${t('assistant.suggestion2')}')" class="px-3 py-1.5 rounded-full bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 text-purple-600 dark:text-purple-300 text-xs font-bold border border-purple-200 dark:border-purple-900 transition">
+                ${t('assistant.suggestion2')}
+              </button>
+              <button onclick="askPreset('${t('assistant.suggestion3')}')" class="px-3 py-1.5 rounded-full bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-600 dark:text-amber-300 text-xs font-bold border border-amber-200 dark:border-amber-900 transition">
+                ${t('assistant.suggestion3')}
+              </button>
+              <button onclick="askPreset('${t('assistant.suggestion4')}')" class="px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-600 dark:text-emerald-300 text-xs font-bold border border-emerald-200 dark:border-emerald-900 transition">
+                ${t('assistant.suggestion4')}
+              </button>
+            </div>
+          </div>
+
+          <div id="chatHistory" class="space-y-3 min-h-[260px] max-h-[400px] overflow-y-auto p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
+            <div class="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-xs text-slate-700 dark:text-slate-300">
+              👋 Hello ${appData.profile.displayName}! I am your Remyndr AI assistant. I answer queries using your saved circulars or general knowledge.
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <input type="text" id="assistantInput" onkeydown="if(event.key==='Enter') handleChatQuery()" placeholder="${t('assistant.placeholder')}" class="flex-1 p-3 bg-slate-100 dark:bg-slate-800 border rounded-xl text-xs outline-none" />
+            <button id="sendChatBtn" onclick="handleChatQuery()" class="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition">${t('assistant.send')}</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function askPreset(q) {
+      const input = document.getElementById('assistantInput');
+      if (input) {
+        input.value = q;
+        handleChatQuery();
+      }
+    }
+
+    async function handleChatQuery() {
+      const input = document.getElementById('assistantInput');
+      const query = input.value.trim();
+      if (!query) return;
+
+      const history = document.getElementById('chatHistory');
+      history.innerHTML += `<div class="p-3 rounded-xl bg-blue-600 text-white text-xs text-right font-semibold">${query}</div>`;
+      input.value = '';
+
+      const loadingId = 'loading-' + Date.now();
+      history.innerHTML += `
+        <div id="${loadingId}" class="p-3 rounded-xl bg-slate-200 dark:bg-slate-700 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2">
+          <i data-lucide="loader-2" class="w-4 h-4 animate-spin text-blue-600"></i>
+          <span>${t('assistant.thinking')}</span>
+        </div>
+      `;
+      history.scrollTop = history.scrollHeight;
+      lucide.createIcons();
+
+      const lower = query.toLowerCase();
+      let reply = '';
+      let actionButtons = '';
+
+      if (lower.includes('deadline') || lower.includes('task') || lower.includes('due')) {
+        const pending = appData.actions.filter(a => !a.completed);
+        if (pending.length > 0) {
+          reply = `Here are your upcoming deadlines:\n` + pending.slice(0, 3).map(a => `• ${a.title} (Due: ${a.dueDate})`).join('\n');
+          actionButtons = `<button onclick="navigateTo('deadlines')" class="mt-2 px-3 py-1 bg-blue-600 text-white rounded text-[10px] font-bold">View Deadlines &rarr;</button>`;
+        } else {
+          reply = "You have no pending deadlines at the moment!";
+        }
+      } else if (lower.includes('fee') || lower.includes('unpaid') || lower.includes('payment')) {
+        const pendingFees = appData.fees.filter(f => f.status === 'Pending');
+        if (pendingFees.length > 0) {
+          reply = `Unpaid Fees (${pendingFees.length}):\n` + pendingFees.map(f => `• ${f.title}: ${f.amount} (Due: ${f.dueDate})`).join('\n');
+          actionButtons = `<button onclick="navigateTo('fees')" class="mt-2 px-3 py-1 bg-rose-600 text-white rounded text-[10px] font-bold">Open Fee Tracker &rarr;</button>`;
+        } else {
+          reply = "All your fee payments are up to date!";
+        }
+      } else if (lower.includes('circular') || lower.includes('notice') || lower.includes('summary')) {
+        const latest = appData.circulars[0];
+        if (latest) {
+          reply = `Latest Circular [${latest.id}]: ${latest.title}\nDepartment: ${latest.department}\nEvent Date: ${latest.eventDate || 'N/A'}\nDeadline: ${latest.deadline || 'N/A'}`;
+          actionButtons = `<button onclick="openCircularDetailModal('${latest.id}')" class="mt-2 px-3 py-1 bg-purple-600 text-white rounded text-[10px] font-bold">Open Notice Details &rarr;</button>`;
+        }
+      }
+
+      if (!reply) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 7000);
+
+          const payload = {
+            contents: [{ parts: [{ text: `Answer this student's query concisely: ${query}` }] }],
+            systemInstruction: { parts: [{ text: "You are Remyndr AI, a helpful academic assistant." }] }
+          };
+          const apiKey = "";
+          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+          const res = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+
+          if (res.ok) {
+            const data = await res.json();
+            reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          }
+        } catch (e) {
+          console.warn("AI fallback:", e);
+        }
+
+        if (!reply) {
+          reply = "For general study or academic inquiries: Organize your study schedules, complete high-priority circular tasks early, and review official campus notices on the Academic Calendar.";
+        }
+      }
+
+      document.getElementById(loadingId)?.remove();
+      history.innerHTML += `
+        <div class="p-3.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-xs text-slate-800 dark:text-slate-100 space-y-1">
+          <p class="whitespace-pre-wrap">${reply}</p>
+          ${actionButtons}
+        </div>
+      `;
+      history.scrollTop = history.scrollHeight;
+    }
+
+    let currentRevisionFile = null;
+
+    function renderCircularUpdatesPage(container) {
+      currentRevisionFile = null;
+      container.innerHTML = `
+        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+          <h1 class="text-2xl font-black">${t('updates.title')}</h1>
+          <p class="text-xs text-slate-500">${t('updates.subtitle')}</p>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-5">
+          <h3 class="text-base font-bold">${t('updates.step1')}</h3>
+          <select id="updateTargetSelect" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none">
+            ${appData.circulars.map(c => `<option value="${c.id}">${c.id} — ${c.title}</option>`).join('')}
+          </select>
+
+          <div class="p-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-2 bg-blue-50/20 dark:bg-blue-950/20">
+            <i data-lucide="file-diff" class="w-6 h-6 mx-auto text-blue-500"></i>
+            <p class="text-xs font-bold">${t('updates.pasteUpdated')}</p>
+            
+            <input type="file" id="revisionFileInput" accept=".pdf,.txt,.png,.jpg,.jpeg" class="hidden" onchange="handleRevisionFileSelect(this)" />
+            <button onclick="document.getElementById('revisionFileInput').click()" class="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs">Browse Revised File</button>
+            <div id="revFileSelectedInfo" class="text-[11px] font-bold text-emerald-600 hidden mt-1"></div>
+
+            <textarea id="updatePastedText" placeholder="Paste updated notice text..." class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-xs outline-none" rows="3"></textarea>
+          </div>
+
+          <button id="runDiffBtn" onclick="processRevisionExtraction()" class="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-lg transition flex items-center gap-2">
+            <i id="revSpinner" data-lucide="loader-2" class="w-4 h-4 animate-spin hidden"></i>
+            <span>${t('updates.runDiffBtn')}</span>
+          </button>
+        </div>
+
+        <div id="diffResultsContainer"></div>
+      `;
+    }
+
+    function handleRevisionFileSelect(input) {
+      if (!input.files || !input.files[0]) return;
+      const file = input.files[0];
+      const info = document.getElementById('revFileSelectedInfo');
+
+      const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
+      const isImg = file.type.startsWith('image/') || /\.(png|jpg|jpeg)$/i.test(file.name);
+      const isTxt = file.type === 'text/plain' || file.name.toLowerCase().endsWith('.txt');
+
+      if (!isPdf && !isImg && !isTxt) {
+        showToast(t('upload.invalidType'), 'error');
+        input.value = '';
+        return;
+      }
+
+      info.innerText = `${t('upload.fileSelected')} ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      info.classList.remove('hidden');
+
+      currentRevisionFile = {
+        name: file.name,
+        type: isPdf ? 'application/pdf' : (isImg ? (file.type || 'image/jpeg') : 'text/plain'),
+        arrayBuffer: null,
+        base64Data: null,
+        base64Url: null,
+        textContent: ''
+      };
+
+      const reader = new FileReader();
+      if (isPdf) {
+        reader.onload = e => currentRevisionFile.arrayBuffer = e.target.result;
+        reader.readAsArrayBuffer(file);
+      } else if (isImg) {
+        reader.onload = e => {
+          currentRevisionFile.base64Data = e.target.result.split(',')[1];
+          currentRevisionFile.base64Url = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      } else {
+        reader.onload = e => currentRevisionFile.textContent = e.target.result;
+        reader.readAsText(file);
+      }
+    }
+
+    async function processRevisionExtraction() {
+      const targetId = document.getElementById('updateTargetSelect')?.value;
+      const target = appData.circulars.find(c => c.id === targetId);
+      const pasteText = document.getElementById('updatePastedText')?.value || '';
+      const spinner = document.getElementById('revSpinner');
+      const runBtn = document.getElementById('runDiffBtn');
+
+      if (!target) return showToast('Select a notice first', 'error');
+      if (!currentRevisionFile && !pasteText.trim()) return showToast('Upload a revised file or paste text first', 'error');
+
+      if (spinner) spinner.classList.remove('hidden');
+      if (runBtn) runBtn.disabled = true;
+
+      try {
+        let extracted = null;
+        let sourceText = pasteText;
+
+        if (currentRevisionFile) {
+          if (currentRevisionFile.type === 'application/pdf' && currentRevisionFile.arrayBuffer) {
+            const pdfText = await extractTextFromPDFBuffer(currentRevisionFile.arrayBuffer);
+            if (pdfText && pdfText.length > 15) {
+              sourceText = pdfText + (pasteText ? '\n' + pasteText : '');
+              extracted = await callGeminiExtractFromText(sourceText);
+            } else if (currentRevisionFile.base64Data) {
+              extracted = await callGeminiExtractFromFile(currentRevisionFile.base64Data, currentRevisionFile.type, pasteText);
+            }
+          } else if (currentRevisionFile.base64Data) {
+            extracted = await callGeminiExtractFromFile(currentRevisionFile.base64Data, currentRevisionFile.type, pasteText);
+            if (!extracted && currentRevisionFile.base64Url) {
+              const ocrText = await extractTextFromImage(currentRevisionFile.base64Url);
+              sourceText = ocrText + (pasteText ? '\n' + pasteText : '');
+            }
+          } else if (currentRevisionFile.textContent) {
+            sourceText = currentRevisionFile.textContent + (pasteText ? '\n' + pasteText : '');
+            extracted = await callGeminiExtractFromText(sourceText);
+          }
+        } else {
+          extracted = await callGeminiExtractFromText(pasteText);
+        }
+
+        if (!extracted) {
+          extracted = extractNoticeFields(sourceText);
+        }
+
+        document.getElementById('diffResultsContainer').innerHTML = `
+          <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-5 animate-in fade-in duration-200 mt-6">
+            <h3 class="text-base font-bold">${t('updates.step2')}</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr class="bg-slate-100 dark:bg-slate-800 text-slate-500">
+                    <th class="p-3">${t('updates.fieldHeader')}</th>
+                    <th class="p-3">${t('updates.prevHeader')}</th>
+                    <th class="p-3">${t('updates.proposedHeader')}</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                  <tr>
+                    <td class="p-3 font-bold">${t('circulars.eventDate')}</td>
+                    <td class="p-3 text-slate-400">${target.eventDate || t('common.notSpecified')}</td>
+                    <td class="p-3 font-bold text-emerald-600"><input type="date" id="diffDate" value="${extracted.eventDate || target.eventDate || ''}" class="bg-slate-50 dark:bg-slate-800 p-1.5 rounded border" /></td>
+                  </tr>
+                  <tr>
+                    <td class="p-3 font-bold">${t('circulars.deadline')}</td>
+                    <td class="p-3 text-slate-400">${target.deadline || t('common.notSpecified')}</td>
+                    <td class="p-3 font-bold text-amber-600"><input type="date" id="diffDeadline" value="${extracted.deadlineDate || target.deadline || ''}" class="bg-slate-50 dark:bg-slate-800 p-1.5 rounded border" /></td>
+                  </tr>
+                  <tr>
+                    <td class="p-3 font-bold">${t('circulars.venue')}</td>
+                    <td class="p-3 text-slate-400">${target.venue || t('common.notSpecified')}</td>
+                    <td class="p-3 font-bold text-emerald-600"><input type="text" id="diffVenue" value="${extracted.venue || target.venue || ''}" class="bg-slate-50 dark:bg-slate-800 p-1.5 rounded border w-full" /></td>
+                  </tr>
+                  <tr>
+                    <td class="p-3 font-bold">${t('circulars.instructions')}</td>
+                    <td class="p-3 text-slate-400 max-w-xs">${formatInstructionsAsBullets(target.instructions)}</td>
+                    <td class="p-3 font-bold text-emerald-600 max-w-xs">${formatInstructionsAsBullets(extracted.instructions || target.instructions)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-3">
+              <button onclick="renderPage()" class="px-4 py-2 rounded-xl border text-xs font-bold">${t('common.cancel')}</button>
+              <button onclick="publishCircularUpdate('${target.id}')" class="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-lg transition">${t('updates.publishBtn')}</button>
+            </div>
+          </div>
+        `;
+      } catch (e) {
+        console.error("Revision diff error:", e);
+        showToast('Diff extraction completed with fallback structure.', 'success');
+      } finally {
+        if (spinner) spinner.classList.add('hidden');
+        if (runBtn) runBtn.disabled = false;
+      }
+    }
+
+    function publishCircularUpdate(id) {
+      const target = appData.circulars.find(c => c.id === id);
+      const newDate = document.getElementById('diffDate')?.value;
+      const newDeadline = document.getElementById('diffDeadline')?.value;
+      const newVenue = document.getElementById('diffVenue')?.value;
+
+      if (newDate) target.eventDate = newDate;
+      if (newDeadline) target.deadline = newDeadline;
+      if (newVenue) target.venue = newVenue;
+
+      target.version = (parseFloat(target.version) + 0.1).toFixed(1);
+
+      appData.events.forEach(e => {
+        if (e.circularId === id) {
+          if (newDate) e.date = newDate;
+          if (newVenue) e.venue = newVenue;
+        }
+      });
+
+      appData.actions.forEach(a => {
+        if (a.circularId === id && newDeadline) {
+          a.dueDate = newDeadline;
+        }
+      });
+
+      appData.revisionHistory.unshift({
+        revisionId: `REV-${Date.now()}`,
+        circularId: id,
+        title: target.title,
+        version: target.version,
+        updatedAt: new Date().toLocaleString(),
+        summary: `Updated notice details to v${target.version}`
+      });
+
+      saveAppData();
+      showToast(t('common.successToast'));
+      renderPage();
+    }
+
+    function renderFeeTrackerPage(container) {
+      container.innerHTML = `
+        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+          <h1 class="text-2xl font-black">${t('fees.title')}</h1>
+          <p class="text-xs text-slate-500">${t('fees.subtitle')}</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          ${appData.fees.map(f => `
+            <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-400">${f.circularId}</span>
+                <select onchange="updateFeeStatus('${f.id}', this.value)" class="px-2.5 py-1 rounded-full text-xs font-bold ${
+                  f.status === 'Paid' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'
+                }">
+                  <option value="Pending" ${f.status === 'Pending' ? 'selected' : ''}>${t('fees.pending')}</option>
+                  <option value="Paid" ${f.status === 'Paid' ? 'selected' : ''}>${t('fees.paid')}</option>
+                </select>
+              </div>
+              <h3 class="text-base font-bold">${f.title}</h3>
+              <p class="text-2xl font-black text-blue-600">${f.amount}</p>
+              <div class="text-xs text-slate-500 flex justify-between">
+                <span>${t('fees.dueDate')} ${f.dueDate}</span>
+                ${f.paidAt ? `<span class="text-emerald-600 font-bold">${t('fees.paidOn')} ${f.paidAt}</span>` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function updateFeeStatus(id, newStatus) {
+      const fee = appData.fees.find(f => f.id === id);
+      if (!fee) return;
+      fee.status = newStatus;
+      fee.paidAt = newStatus === 'Paid' ? new Date().toISOString().split('T')[0] : null;
+      saveAppData();
+      showToast(t('common.successToast'));
+      renderPage();
+    }
+
+    function renderAllCircularsPage(container) {
+      container.innerHTML = `
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+          <div>
+            <h1 class="text-2xl font-black">${t('circulars.title')}</h1>
+            <p class="text-xs text-slate-500">${t('circulars.subtitle')}</p>
+          </div>
+          <button onclick="openUploadCircularModal()" class="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-2 transition">
+            <i data-lucide="upload" class="w-4 h-4"></i> ${t('circulars.uploadNoticeBtn')}
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          ${appData.circulars.map(c => `
+            <div onclick="openCircularDetailModal('${c.id}')" class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 cursor-pointer hover:border-blue-500 transition">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950 px-2.5 py-1 rounded-md">${c.id}</span>
+                <span class="text-xs font-bold text-slate-400">v${c.version}</span>
+              </div>
+              <h3 class="text-base font-bold">${c.title}</h3>
+              <p class="text-xs text-slate-500">${c.department} • ${t('circulars.issuedOn')} ${c.issueDate}</p>
+              <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                <span>${t('circulars.eventDate')}: <strong>${c.eventDate || t('common.notSpecified')}</strong></span>
+                <span class="text-amber-600 font-bold">${t('circulars.deadline')}: ${c.deadline || t('common.notSpecified')}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderActionsPage(container) {
+      const filtered = appData.actions.filter(a => {
+        if (currentTaskFilter === 'pending') return !a.completed;
+        if (currentTaskFilter === 'completed') return a.completed;
+        return true;
+      });
+
+      container.innerHTML = `
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+          <div>
+            <h1 class="text-2xl font-black">${t('actions.title')}</h1>
+            <p class="text-xs text-slate-500">${t('actions.subtitle')}</p>
+          </div>
+
+          <div class="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold">
+            <button onclick="navigateTo('actions', 'all')" class="px-3 py-1.5 rounded-lg ${currentTaskFilter === 'all' ? 'bg-white dark:bg-slate-700 shadow-sm' : ''}">${t('actions.all')}</button>
+            <button onclick="navigateTo('actions', 'pending')" class="px-3 py-1.5 rounded-lg ${currentTaskFilter === 'pending' ? 'bg-white dark:bg-slate-700 shadow-sm' : ''}">${t('actions.pending')}</button>
+            <button onclick="navigateTo('actions', 'completed')" class="px-3 py-1.5 rounded-lg ${currentTaskFilter === 'completed' ? 'bg-white dark:bg-slate-700 shadow-sm' : ''}">${t('actions.completed')}</button>
+          </div>
+        </div>
+
+        <div class="space-y-3 max-w-3xl">
+          ${filtered.map(a => `
+            <div onclick="openDeadlineDetailModal('${a.id}')" class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 cursor-pointer hover:border-blue-400 transition">
+              <div class="flex items-center gap-3">
+                <input type="checkbox" ${a.completed ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleTaskDone('${a.id}')" class="w-4 h-4 text-blue-600 rounded cursor-pointer" />
+                <div>
+                  <span class="text-xs font-bold ${a.completed ? 'line-through text-slate-400' : ''}">${a.title}</span>
+                  <span class="text-[10px] text-slate-400 block">${t('actions.dueDate')}: ${a.dueDate} • ${t('actions.ref')}: ${a.circularId}</span>
+                </div>
+              </div>
+              <button onclick="event.stopPropagation(); deleteTask('${a.id}');" class="p-1.5 text-slate-400 hover:text-rose-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function toggleTaskDone(id) {
+      const act = appData.actions.find(a => a.id === id);
+      if (!act) return;
+      act.completed = !act.completed;
+      act.completedAt = act.completed ? new Date().toISOString().split('T')[0] : null;
+      saveAppData();
+      showToast(t('common.successToast'));
+      renderPage();
+    }
+
+    async function deleteTask(id) {
+      const taskId = String(id);
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId);
+      if (isUuid && isAuthenticated) {
+        const { data: authData } = await supabaseClient.auth.getUser();
+        if (authData?.user) {
+          const { error } = await supabaseClient.from('tasks').delete()
+            .eq('id', taskId).eq('user_id', authData.user.id);
+          if (error) {
+            console.error('Could not delete task from Supabase:', error);
+            showToast(`Could not delete task: ${error.message}`, 'error');
+            return;
+          }
+        }
+      }
+      appData.actions = appData.actions.filter(a => String(a.id) !== taskId);
+      saveAppData();
+      showToast('Task removed');
+      renderPage();
+    }
+
+    function renderDeadlinesPage(container) {
+      const upcoming = appData.actions.filter(a => !a.completed);
+      container.innerHTML = `
+        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+          <h1 class="text-2xl font-black">${t('deadlines.title')}</h1>
+          <p class="text-xs text-slate-500">${t('deadlines.subtitle')}</p>
+        </div>
+        <div class="space-y-3 max-w-3xl">
+          ${upcoming.map(a => `
+            <div onclick="openDeadlineDetailModal('${a.id}')" class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between cursor-pointer hover:border-blue-400 transition">
+              <div>
+                <h4 class="text-xs font-bold">${a.title}</h4>
+                <p class="text-[10px] text-slate-400">${t('actions.ref')}: ${a.circularId}</p>
+              </div>
+              <span class="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">${t('actions.dueDate')}: ${a.dueDate}</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function openDeadlineDetailModal(actId) {
+      const act = appData.actions.find(a => a.id === actId);
+      if (!act) return;
+
+      const circ = appData.circulars.find(c => c.id === act.circularId);
+      const today = new Date().toISOString().split('T')[0];
+      let statusBadge = '';
+      
+      if (act.dueDate < today) {
+        statusBadge = `<span class="px-2.5 py-1 rounded-md text-xs font-bold bg-rose-100 text-rose-700">${t('actions.statusOverdue', { days: 1 })}</span>`;
+      } else if (act.dueDate === today) {
+        statusBadge = `<span class="px-2.5 py-1 rounded-md text-xs font-bold bg-amber-100 text-amber-700">${t('actions.statusDueToday')}</span>`;
+      } else {
+        statusBadge = `<span class="px-2.5 py-1 rounded-md text-xs font-bold bg-blue-100 text-blue-700">${t('actions.statusDueIn', { days: 3 })}</span>`;
+      }
+
+      openModal(`
+        <div class="space-y-4 text-xs">
+          <div class="flex items-center justify-between border-b pb-3">
+            <h3 class="text-base font-black">${t('actions.detailsTitle')}</h3>
+            ${statusBadge}
+          </div>
+
+          <h2 class="text-sm font-extrabold text-slate-800 dark:text-slate-100">${act.title}</h2>
+          <p class="text-slate-500 font-medium">${act.description || t('common.notSpecified')}</p>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border">
+              <span class="text-[10px] text-slate-400 font-bold block">${t('actions.dueDate')}</span>
+              <span class="font-bold text-amber-600">${act.dueDate}</span>
+            </div>
+            <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border">
+              <span class="text-[10px] text-slate-400 font-bold block">${t('actions.priority')}</span>
+              <span class="font-bold text-blue-600">${act.priority || 'Medium'}</span>
+            </div>
+          </div>
+
+          <div class="p-3 rounded-xl bg-blue-50/50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 space-y-2">
+            <span class="font-bold text-slate-700 dark:text-slate-300 block">${t('actions.ref')}: ${act.circularId}</span>
+            ${circ ? `<p class="text-slate-500">${circ.title} (${circ.department})</p>` : ''}
+          </div>
+
+          <div class="flex flex-wrap justify-end gap-2 pt-2 border-t">
+            <button onclick="closeModal()" class="px-3 py-2 rounded-xl border font-bold">${t('circulars.close')}</button>
+            ${circ ? `<button onclick="closeModal(); openCircularDetailModal('${circ.id}')" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 font-bold">${t('actions.openCircular')}</button>` : ''}
+            <button onclick="closeModal(); navigateTo('calendar'); selectedDateStr='${act.dueDate}';" class="px-3 py-2 rounded-xl bg-purple-600 text-white font-bold">${t('actions.viewInCalendar')}</button>
+            <button onclick="toggleTaskDone('${act.id}'); closeModal();" class="px-4 py-2 rounded-xl bg-blue-600 text-white font-bold">
+              ${act.completed ? t('actions.reopen') : t('actions.markDone')}
+            </button>
+          </div>
+        </div>
+      `);
+    }
+
+    function renderCompletedTasksPage(container) {
+      const completed = appData.actions.filter(a => a.completed);
+      container.innerHTML = `
+        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+          <h1 class="text-2xl font-black">${t('nav.completed')}</h1>
+        </div>
+        <div class="space-y-3 max-w-3xl">
+          ${completed.map(a => `
+            <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <h4 class="text-xs font-bold line-through text-slate-400">${a.title}</h4>
+                <p class="text-[10px] text-slate-400">Completed on ${a.completedAt || 'Recently'}</p>
+              </div>
+              <button onclick="toggleTaskDone('${a.id}')" class="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-bold">${t('actions.reopen')}</button>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderChecklistsPage(container) {
+      container.innerHTML = `
+        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+          <h1 class="text-2xl font-black">${t('checklists.title')}</h1>
+          <p class="text-xs text-slate-500">${t('checklists.subtitle')}</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          ${appData.checklists.map(chk => {
+            const doneCount = chk.items.filter(i => i.done).length;
+            const pct = Math.round((doneCount / chk.items.length) * 100);
+            return `
+              <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+                <div class="flex items-center justify-between">
+                  <h3 class="text-base font-bold">${chk.title}</h3>
+                  <span class="text-xs font-bold text-blue-600">${t('checklists.doneCount', { pct })}</span>
+                </div>
+                <div class="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                  <div class="bg-blue-600 h-full" style="width: ${pct}%"></div>
+                </div>
+                <div class="space-y-2 text-xs">
+                  ${chk.items.map(item => `
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" ${item.done ? 'checked' : ''} onchange="toggleChecklistItem('${chk.id}', '${item.id}')" class="w-4 h-4 text-blue-600 rounded" />
+                      <span class="${item.done ? 'line-through text-slate-400' : ''}">${item.text}</span>
+                    </label>
+                  `).join('')}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function toggleChecklistItem(chkId, itemId) {
+      const chk = appData.checklists.find(c => c.id === chkId);
+      const item = chk?.items.find(i => i.id === itemId);
+      if (item) item.done = !item.done;
+      saveAppData();
+      renderPage();
+    }
+
+    function renderNotificationsPage(container) {
+      container.innerHTML = `
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+          <h1 class="text-2xl font-black">${t('notifications.title')}</h1>
+          <button onclick="markAllNotifsRead()" class="text-xs font-bold text-blue-600 hover:underline">${t('notifications.markAllRead')}</button>
+        </div>
+        <div class="space-y-3 max-w-3xl">
+          ${appData.notifications.map(n => `
+            <div class="p-4 rounded-xl border flex items-start gap-3 ${n.unread ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'}">
+              <i data-lucide="bell" class="w-5 h-5 text-blue-500 shrink-0 mt-0.5"></i>
+              <div class="flex-1">
+                <div class="flex items-center justify-between">
+                  <h4 class="text-xs font-bold">${n.title}</h4>
+                  <span class="text-[10px] text-slate-400">${n.time}</span>
+                </div>
+                <p class="text-xs text-slate-500 mt-1">${n.message}</p>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function markAllNotifsRead() {
+      appData.notifications.forEach(n => n.unread = false);
+      saveAppData();
+      renderPage();
+    }
+
+    function renderProfilePage(container) {
+      container.innerHTML = `
+        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+          <h1 class="text-2xl font-black">${t('profile.title')}</h1>
+          <p class="text-xs text-slate-500">${t('profile.subtitle')}</p>
+        </div>
+        <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 max-w-xl space-y-4">
+          <div>
+            <label class="block text-xs font-bold mb-1">${t('profile.displayName')}</label>
+            <input type="text" id="pName" value="${appData.profile.displayName}" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl text-xs font-semibold outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold mb-1">${t('profile.email')}</label>
+            <input type="email" id="pEmail" value="${appData.profile.email}" disabled class="w-full p-2.5 bg-slate-100 dark:bg-slate-800/50 border rounded-xl text-xs font-semibold outline-none cursor-not-allowed text-slate-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold mb-1">${t('profile.college')}</label>
+            <input type="text" id="pCollege" value="${appData.profile.college}" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl text-xs font-semibold outline-none" />
+          </div>
+          <button onclick="saveProfile()" class="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-lg transition">${t('profile.saveBtn')}</button>
+        </div>
+      `;
+    }
+
+    function saveProfile() {
+      const newName = document.getElementById('pName').value;
+      const newCollege = document.getElementById('pCollege').value;
+
+      appData.profile.displayName = newName;
+      appData.profile.college = newCollege;
+
+      // Update matching account in registry
+      const acc = appData.accounts.find(a => a.email.toLowerCase() === appData.activeAccountEmail.toLowerCase());
+      if (acc) {
+        acc.displayName = newName;
+        acc.college = newCollege;
+      }
+
+      saveAppData();
+      showToast(t('common.successToast'));
+    }
+
+    function renderSettingsPage(container) {
+      container.innerHTML = `
+        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+          <h1 class="text-2xl font-black">${t('settings.title')}</h1>
+          <p class="text-xs text-slate-500">${t('settings.subtitle')}</p>
+        </div>
+        <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 max-w-xl space-y-6 text-xs">
+          <div>
+            <label class="block font-bold mb-2 text-sm">${t('settings.uiLang')}</label>
+            <select onchange="changeLang(this.value)" class="p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl font-bold text-xs">
+              <option value="en" ${currentLang === 'en' ? 'selected' : ''}>English</option>
+              <option value="hi" ${currentLang === 'hi' ? 'selected' : ''}>हिंदी (Hindi)</option>
+              <option value="kn" ${currentLang === 'kn' ? 'selected' : ''}>ಕನ್ನಡ (Kannada)</option>
+            </select>
+          </div>
+
+          <div class="border-t pt-5 space-y-4">
+            <div>
+              <span class="font-bold block text-sm">${t('settings.accountMgmt')}</span>
+              <span class="text-slate-400">Active Account: <strong>${appData.profile.displayName}</strong> (${appData.activeAccountEmail})</span>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+              <button onclick="openAddAccountModal()" class="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl font-bold hover:bg-slate-200 transition">
+                + ${t('settings.addAccount')}
+              </button>
+              <button onclick="openChangePasswordModal()" class="px-3.5 py-2 bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-300 rounded-xl font-bold hover:bg-blue-100 transition">
+                ${t('settings.changePassword')}
+              </button>
+              <button onclick="openDeleteAccountModal()" class="px-3.5 py-2 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition">
+                ${t('settings.deleteAccount')}
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function openDeleteAccountModal() {
+      const currentAccountName = appData.profile?.displayName || 'User Account';
+      const currentAccountEmail = appData.activeAccountEmail || 'user@example.com';
+
+      openModal(`
+        <div class="space-y-4 text-xs">
+          <div class="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div class="p-2.5 rounded-xl bg-rose-100 dark:bg-rose-950 text-rose-600 shrink-0">
+              <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-black text-rose-600 dark:text-rose-400">Delete Account & Data</h3>
+              <p class="text-[11px] text-slate-500">Permanent data purging</p>
+            </div>
+          </div>
+
+          <p class="text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+            Are you sure you want to delete the account <strong class="text-slate-900 dark:text-slate-100">${currentAccountName}</strong> (${currentAccountEmail})?
+          </p>
+
+          <div class="p-3.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 space-y-1.5 text-rose-700 dark:text-rose-300">
+            <span class="font-bold block">⚠️ The following data will be permanently removed:</span>
+            <ul class="list-disc list-inside space-y-1 text-[11px]">
+              <li>Profile settings and authentication credentials</li>
+              <li>All associated notice records and revision history</li>
+              <li>All pending/completed tasks and smart checklists</li>
+              <li>Personal calendar events and deadline reminders</li>
+              <li>Fee tracking status records and notifications</li>
+            </ul>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button onclick="closeModal()" class="px-4 py-2 rounded-xl border text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+              ${t('common.cancel')}
+            </button>
+            <button id="confirmDeleteAccBtn" onclick="executeAccountDeletion()" class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-lg shadow-rose-500/20 transition flex items-center gap-2">
+              <i id="deleteAccSpinner" data-lucide="loader-2" class="w-4 h-4 animate-spin hidden"></i>
+              <span>Permanently Delete Account</span>
+            </button>
+          </div>
+        </div>
+      `);
+    }
+
+    function executeAccountDeletion() {
+      const btn = document.getElementById('confirmDeleteAccBtn');
+      const spinner = document.getElementById('deleteAccSpinner');
+
+      if (btn) btn.disabled = true;
+      if (spinner) spinner.classList.remove('hidden');
+
+      setTimeout(() => {
+        const targetEmail = appData.activeAccountEmail.toLowerCase();
+
+        // 1. Remove from accounts registry
+        appData.accounts = appData.accounts.filter(acc => acc.email.toLowerCase() !== targetEmail);
+
+        // 2. Remove user store map entry
+        if (appData.userStores && appData.userStores[targetEmail]) {
+          delete appData.userStores[targetEmail];
+        }
+
+        // 3. Switch to remaining account or reset
+        if (appData.accounts.length > 0) {
+          const nextAccount = appData.accounts[0];
+          switchActiveAccount(nextAccount.email);
+        } else {
+          appData = JSON.parse(JSON.stringify(INITIAL_SEED_DATA));
+          switchActiveAccount(appData.accounts[0].email);
+        }
+
+        saveAppData();
+        isAuthenticated = false;
+        localStorage.removeItem('remyndr_authenticated');
+
+        closeModal();
+        showToast('Account and associated data deleted successfully.');
+        navigateTo('login');
+      }, 400);
+    }
+
+    function openAddAccountModal() {
+      openModal(`
+        <div class="space-y-3 text-xs">
+          <h3 class="text-base font-black">${t('settings.addAccount')}</h3>
+          <div>
+            <label class="block font-bold mb-1">${t('profile.displayName')}</label>
+            <input type="text" id="newAccName" placeholder="Full Name" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" />
+          </div>
+          <div>
+            <label class="block font-bold mb-1">${t('auth.emailLabel')}</label>
+            <input type="email" id="newAccEmail" placeholder="student@example.com" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" />
+          </div>
+          <div>
+            <label class="block font-bold mb-1">${t('auth.passwordLabel')}</label>
+            <input type="password" id="newAccPass" placeholder="••••••••" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" />
+          </div>
+          <div class="flex justify-end gap-2 pt-3">
+            <button onclick="closeModal()" class="px-4 py-2 border rounded-xl font-bold">${t('common.cancel')}</button>
+            <button onclick="saveNewAccount()" class="px-5 py-2 bg-blue-600 text-white rounded-xl font-bold">${t('common.save')}</button>
+          </div>
+        </div>
+      `);
+    }
+
+    function saveNewAccount() {
+      const name = document.getElementById('newAccName')?.value.trim();
+      const email = document.getElementById('newAccEmail')?.value.trim().toLowerCase();
+      const pass = document.getElementById('newAccPass')?.value;
+
+      if (!name || !email || !pass) return showToast('Please complete all fields', 'error');
+
+      const existing = appData.accounts.find(a => a.email.toLowerCase() === email);
+      if (existing) return showToast('An account with this email already exists.', 'error');
+
+      appData.accounts.push({ email, passwordHash: pass, displayName: name, college: appData.profile.college || 'College' });
+      appData.userStores[email] = createDefaultAccountData(email, name, appData.profile.college || 'College');
+      
+      switchActiveAccount(email);
+      saveAppData();
+      closeModal();
+      showToast(`Account created for ${name}`);
+      renderPage();
+    }
+
+    function openChangePasswordModal() {
+      openModal(`
+        <div class="space-y-3 text-xs">
+          <h3 class="text-base font-black">${t('settings.changePassword')}</h3>
+          <div>
+            <label class="block font-bold mb-1">${t('auth.currentPassLabel')}</label>
+            <input type="password" id="curPass" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" />
+          </div>
+          <div>
+            <label class="block font-bold mb-1">${t('auth.newPassLabel')}</label>
+            <input type="password" id="newPass1" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" />
+          </div>
+          <div>
+            <label class="block font-bold mb-1">${t('auth.confirmPassLabel')}</label>
+            <input type="password" id="newPass2" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" />
+          </div>
+          <div class="flex justify-end gap-2 pt-3">
+            <button onclick="closeModal()" class="px-4 py-2 border rounded-xl font-bold">${t('common.cancel')}</button>
+            <button onclick="submitPasswordChange()" class="px-5 py-2 bg-blue-600 text-white rounded-xl font-bold">${t('auth.submitChangePass')}</button>
+          </div>
+        </div>
+      `);
+    }
+
+    function submitPasswordChange() {
+      const curPass = document.getElementById('curPass')?.value;
+      const p1 = document.getElementById('newPass1')?.value;
+      const p2 = document.getElementById('newPass2')?.value;
+
+      const acc = appData.accounts.find(a => a.email.toLowerCase() === appData.activeAccountEmail.toLowerCase());
+      if (!acc) return showToast('Account error', 'error');
+
+      if (curPass !== acc.passwordHash) return showToast('Current password is incorrect.', 'error');
+      if (!p1 || p1 !== p2) return showToast('New passwords do not match.', 'error');
+
+      acc.passwordHash = p1;
+      saveAppData();
+      showToast('Password updated successfully!');
+      closeModal();
+    }
+
+    let authTab = 'login'; // 'login' or 'signup'
+
+    function renderLoginPage(container) {
+      container.innerHTML = `
+        <div class="min-h-[85vh] flex items-center justify-center py-6 px-4">
+          <div class="w-full max-w-md bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6 relative overflow-hidden">
+            <!-- Decorative Subtle Accent Gradients -->
+            <div class="absolute -top-16 -right-16 w-36 h-36 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
+            <div class="absolute -bottom-16 -left-16 w-36 h-36 bg-purple-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+            <!-- BRANDING HEADER -->
+            <div class="text-center space-y-2">
+              <div class="inline-flex items-center gap-3">
+                <svg class="h-10 w-10 shrink-0 drop-shadow-sm" viewBox="0 0 500 500" fill="none">
+                  <rect x="110" y="130" width="280" height="250" rx="48" fill="url(#mainGrad)" />
+                  <rect x="175" y="100" width="28" height="60" rx="14" fill="#0284c7" />
+                  <rect x="295" y="100" width="28" height="60" rx="14" fill="#0284c7" />
+                  <rect x="132" y="190" width="236" height="165" rx="26" fill="#FFFFFF" />
+                  <g fill="#93c5fd">
+                    <rect x="160" y="220" width="38" height="34" rx="10" />
+                    <rect x="212" y="220" width="38" height="34" rx="10" />
+                    <rect x="264" y="220" width="38" height="34" rx="10" fill="#a5b4fc" />
+                  </g>
+                  <circle cx="330" cy="310" r="72" fill="url(#badgeGrad)" stroke="#FFFFFF" stroke-width="10" />
+                  <path d="M294 310 L318 334 L366 286" fill="none" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <span class="text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">
+                  REMYNDR
+                </span>
+              </div>
+              <p class="text-xs font-bold text-slate-500 uppercase tracking-widest">${t('brandTagline')}</p>
+            </div>
+
+            <!-- TOGGLE TABS (LOGIN vs CREATE ACCOUNT) -->
+            <div class="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl text-xs font-bold">
+              <button onclick="setAuthTab('login')" class="flex-1 py-2.5 rounded-xl transition-all ${authTab === 'login' ? 'bg-white dark:bg-slate-700 shadow-md text-blue-600 dark:text-blue-400' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'}">
+                ${t('auth.loginTab')}
+              </button>
+              <button onclick="setAuthTab('signup')" class="flex-1 py-2.5 rounded-xl transition-all ${authTab === 'signup' ? 'bg-white dark:bg-slate-700 shadow-md text-blue-600 dark:text-blue-400' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'}">
+                ${t('auth.signupTab')}
+              </button>
+            </div>
+
+            <!-- LOGIN FORM VIEW -->
+            ${authTab === 'login' ? `
+              <div class="space-y-4 text-xs animate-in fade-in duration-150">
+                <div>
+                  <label class="block font-bold mb-1">${t('auth.emailLabel')}</label>
+                  <input type="email" id="loginEmail" value="${appData.activeAccountEmail || 'aarav.sharma@example.com'}" placeholder="student@example.com" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none font-medium focus:ring-2 focus:ring-blue-500 transition" />
+                </div>
+
+                <div>
+                  <label class="block font-bold mb-1">${t('auth.passwordLabel')}</label>
+                  <div class="relative">
+                    <input type="password" id="loginPassword" value="demo123" placeholder="••••••••" class="w-full p-3 pr-16 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none font-medium focus:ring-2 focus:ring-blue-500 transition" />
+                    <button type="button" onclick="togglePassVisibility('loginPassword', this)" class="absolute right-3 top-3.5 text-[10px] font-bold text-blue-600 uppercase">
+                      ${t('auth.showPass')}
+                    </button>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-1">
+                  <button onclick="openForgotPasswordModal()" class="text-blue-600 dark:text-blue-400 text-xs font-bold hover:underline">${t('auth.forgotPassBtn')}</button>
+                </div>
+
+                <button onclick="executeLogin()" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold shadow-lg shadow-blue-500/20 transition">
+                  ${t('auth.loginBtn')}
+                </button>
+              </div>
+            ` : `
+              <!-- CREATE ACCOUNT FORM VIEW -->
+              <div class="space-y-3.5 text-xs animate-in fade-in duration-150">
+                <div>
+                  <label class="block font-bold mb-1">${t('auth.nameLabel')}</label>
+                  <input type="text" id="signupName" placeholder="Aarav Sharma" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none font-medium" />
+                </div>
+
+                <div>
+                  <label class="block font-bold mb-1">${t('auth.emailLabel')}</label>
+                  <input type="email" id="signupEmail" placeholder="student@example.com" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none font-medium" />
+                </div>
+
+                <div>
+                  <label class="block font-bold mb-1">${t('auth.collegeLabel')}</label>
+                  <input type="text" id="signupCollege" placeholder="Northstar Institute of Technology" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none font-medium" />
+                </div>
+
+                <div>
+                  <label class="block font-bold mb-1">${t('auth.passwordLabel')}</label>
+                  <input type="password" id="signupPassword" placeholder="••••••••" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none font-medium" />
+                </div>
+
+                <div>
+                  <label class="block font-bold mb-1">${t('auth.confirmPassLabel')}</label>
+                  <input type="password" id="signupConfirmPassword" placeholder="••••••••" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none font-medium" />
+                </div>
+
+                <button onclick="executeSignup()" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold shadow-lg shadow-blue-500/20 transition mt-2">
+                  ${t('auth.createAccountBtn')}
+                </button>
+              </div>
+            `}
+
+            <div class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-500 text-center">
+              ${t('auth.demoModeNotice')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function setAuthTab(tab) {
+      authTab = tab;
+      const main = document.getElementById('mainContainer');
+      if (main) renderLoginPage(main);
+    }
+
+    function togglePassVisibility(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (input.type === 'password') {
+        input.type = 'text';
+        btn.innerText = t('auth.hidePass');
+      } else {
+        input.type = 'password';
+        btn.innerText = t('auth.showPass');
+      }
+    }
+
+    async function executeLogin() {
+  const emailInput = document.getElementById('loginEmail')?.value.trim().toLowerCase();
+  const passInput = document.getElementById('loginPassword')?.value;
+
+  if (!emailInput || !passInput) {
+    return showToast(t('auth.invalidCreds'), 'error');
+  }
+
+  try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email: emailInput,
+      password: passInput
+    });
+
+    if (error) {
+      return showToast(error.message, 'error');
+    }
+
+    const user = data.user;
+
+    if (!user) {
+      return showToast('Login failed. Please try again.', 'error');
+    }
+
+    const email = user.email.toLowerCase();
+    const displayName =
+      user.user_metadata?.display_name ||
+      user.user_metadata?.full_name ||
+      email.split('@')[0];
+
+    const college =
+      user.user_metadata?.college || 'Institute';
+
+    let account = appData.accounts.find(
+      a => a.email.toLowerCase() === email
+    );
+
+    if (!account) {
+      account = { email, displayName, college };
+      appData.accounts.push(account);
+    } else {
+      account.displayName = displayName;
+      account.college = college;
+    }
+
+    if (!appData.userStores[email]) {
+      appData.userStores[email] =
+        createDefaultAccountData(email, displayName, college);
+    }
+
+    isAuthenticated = true;
+    localStorage.setItem('remyndr_authenticated', 'true');
+
+    switchActiveAccount(email);
+    await loadTasksFromSupabase(false);
+    await loadCircularsFromSupabase(false);
+    saveAppData();
+
+    showToast('Logged in successfully!');
+    navigateTo('dashboard');
+
+  } catch (err) {
+    console.error('Supabase login error:', err);
+    showToast('Unable to log in. Check your connection and try again.', 'error');
+  }
+}
+
+    async function executeSignup() {
+  const name = document.getElementById('signupName')?.value.trim();
+  const email = document.getElementById('signupEmail')?.value.trim().toLowerCase();
+  const college = document.getElementById('signupCollege')?.value.trim();
+  const pass = document.getElementById('signupPassword')?.value;
+  const confirmPass = document.getElementById('signupConfirmPassword')?.value;
+
+  if (!name || !email || !pass) {
+    return showToast('Please enter your name, email, and password.', 'error');
+  }
+
+  if (pass !== confirmPass) {
+    return showToast('Passwords do not match.', 'error');
+  }
+
+  if (pass.length < 6) {
+    return showToast('Password must be at least 6 characters.', 'error');
+  }
+
+  try {
+    const { data, error } = await supabaseClient.auth.signUp({
+      email,
+      password: pass,
+      options: {
+        data: {
+          display_name: name,
+          college: college || 'Institute'
+        }
+      }
+    });
+
+    if (error) {
+      return showToast(error.message, 'error');
+    }
+
+    if (data.session && data.user) {
+      const user = data.user;
+      const userEmail = user.email.toLowerCase();
+
+      const account = {
+        email: userEmail,
+        displayName: name,
+        college: college || 'Institute'
+      };
+
+      const existingIndex = appData.accounts.findIndex(
+        a => a.email.toLowerCase() === userEmail
+      );
+
+      if (existingIndex >= 0) {
+        appData.accounts[existingIndex] = account;
+      } else {
+        appData.accounts.push(account);
+      }
+
+      if (!appData.userStores[userEmail]) {
+        appData.userStores[userEmail] =
+          createDefaultAccountData(userEmail, name, college || 'Institute');
+      }
+
+      isAuthenticated = true;
+      localStorage.setItem('remyndr_authenticated', 'true');
+
+      switchActiveAccount(userEmail);
+      saveAppData();
+
+      showToast(`Welcome ${name}! Account created.`);
+      navigateTo('dashboard');
+    } else {
+      showToast(
+        'Account created! Check your email to confirm your account before logging in.',
+        'success'
+      );
+    }
+
+  } catch (err) {
+    console.error('Supabase signup error:', err);
+    showToast('Unable to create account. Please try again.', 'error');
+  }
+}
+
+    function openForgotPasswordModal() {
+      openModal(`
+        <div class="space-y-3 text-xs">
+          <h3 class="text-base font-black">${t('auth.resetPassTitle')}</h3>
+          <p class="text-slate-500">${t('auth.resetPassSub')}</p>
+          <div>
+            <label class="block font-bold mb-1">${t('auth.emailLabel')}</label>
+            <input type="email" id="recoveryEmail" value="${appData.activeAccountEmail}" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" />
+          </div>
+          <div class="flex justify-end gap-2 pt-2">
+            <button onclick="closeModal()" class="px-4 py-2 border rounded-xl font-bold">${t('common.close')}</button>
+            <button onclick="showToast('Password reset link simulated.'); closeModal();" class="px-5 py-2 bg-blue-600 text-white rounded-xl font-bold">Send Recovery Link</button>
+          </div>
+        </div>
+      `);
+    }
+
+    function toggleTheme() {
+      const isDark = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('remyndr_theme', isDark ? 'dark' : 'light');
+    }
+
+    if (localStorage.getItem('remyndr_theme') === 'dark') {
+      document.documentElement.classList.add('dark');
+    }
+
+    document.getElementById('mobileMenuBtn').onclick = () => {
+      document.getElementById('sidebar').classList.toggle('-translate-x-full');
+    };
+
+    document.getElementById('globalSearchInput').oninput = (e) => {
+      if (e.target.value.trim().length > 1) navigateTo('circulars');
+    };
+
+    window.onload = async function() {
+      initStationeryBackground();
+
+      // Step 3: restore authentication from the real Supabase session,
+      // rather than trusting only the browser's local login flag.
+      try {
+        const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
+        const session = sessionData?.session;
+
+        if (sessionError) {
+          console.error('Could not restore Supabase session:', sessionError);
+        }
+
+        if (session?.user) {
+          const user = session.user;
+          const email = (user.email || '').toLowerCase();
+          const displayName = user.user_metadata?.display_name || user.user_metadata?.full_name || email.split('@')[0] || 'Student';
+          const college = user.user_metadata?.college || 'Institute';
+
+          let account = appData.accounts.find(a => (a.email || '').toLowerCase() === email);
+          if (!account) {
+            account = { email, displayName, college };
+            appData.accounts.push(account);
+          } else {
+            account.displayName = displayName;
+            account.college = college;
+          }
+
+          if (!appData.userStores[email]) {
+            appData.userStores[email] = createDefaultAccountData(email, displayName, college);
+          }
+
+          isAuthenticated = true;
+          localStorage.setItem('remyndr_authenticated', 'true');
+          localStorage.setItem('remyndr_active_email', email);
+          switchActiveAccount(email);
+
+          const hash = window.location.hash.replace('#', '') || 'dashboard';
+          currentRoute = hash === 'login' ? 'dashboard' : hash;
+          await loadCircularsFromSupabase(false);
+        } else {
+          // A local flag alone is not a valid login session.
+          isAuthenticated = false;
+          localStorage.removeItem('remyndr_authenticated');
+          localStorage.removeItem('remyndr_active_email');
+          currentRoute = 'login';
+          window.location.hash = 'login';
+        }
+      } catch (err) {
+        console.error('Session restore failed:', err);
+        isAuthenticated = false;
+        localStorage.removeItem('remyndr_authenticated');
+        currentRoute = 'login';
+        window.location.hash = 'login';
+      }
+
+      changeLang(currentLang);
+    };
+  </script>
+</body>
+</html>
