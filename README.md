@@ -96,14 +96,3 @@ The goal is to bring essential college information and productivity tools togeth
 - **Aanya Maheshwari**
 - **Gowthami**
 
----
-
-## 🚀 Deployment
-
-The frontend can be deployed using GitHub Pages or another static website hosting platform.
-
-Once deployed, the live website link will be available in the project description.
-
----
-
-**Remyndr — Every Notice. On Time.** 🔔
