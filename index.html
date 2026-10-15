@@ -241,10 +241,33 @@
 
   <script>
     const STORAGE_KEY = 'remyndr_app_data_v50';
+    // Supabase client: retry a transient network failure once for password login only.
+    // This does not bypass Supabase security or replace a valid project URL/key.
     const supabaseClient = window.supabase.createClient(
-  'https://xoplakybnwhvnysvqkei.supabase.co',
-  'sb_publishable_dg6CzrjuUfaF2mRF4aDohA_gWFvCtId'
-);
+      'https://xoplakybnwhvnysvqkei.supabase.co',
+      'sb_publishable_dg6CzrjuUfaF2mRF4aDohA_gWFvCtId',
+      {
+        global: {
+          fetch: async (input, init = {}) => {
+            const requestUrl = typeof input === 'string' ? input : (input?.url || '');
+            const isPasswordLogin = requestUrl.includes('/auth/v1/token') &&
+              requestUrl.includes('grant_type=password');
+            try {
+              return await fetch(input, init);
+            } catch (firstError) {
+              if (!isPasswordLogin) throw firstError;
+              await new Promise(resolve => setTimeout(resolve, 650));
+              try {
+                return await fetch(input, init);
+              } catch (secondError) {
+                console.error('Supabase password login could not reach the server after retry.', secondError);
+                throw secondError;
+              }
+            }
+          }
+        }
+      }
+    );
 
     // MULTI-LANGUAGE DICTIONARY
     const i18nDict = {
@@ -946,7 +969,7 @@
 
     function formatInstructionsAsBullets(instText) {
       if (!instText || typeof instText !== 'string' || !instText.trim()) {
-        return `<p class="text-slate-400 italic text-xs">${t('common.noInstructions')}</p>`;
+        return `<ul class="space-y-1.5 text-slate-700 dark:text-slate-300 text-xs"><li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 mt-1.5"></span><span class="font-medium leading-relaxed text-xs">Please read the circular carefully and follow the stated eligibility, registration, payment, and deadline requirements.</span></li></ul>`;
       }
 
       let cleaned = instText
@@ -1741,6 +1764,7 @@
           const pageText = textContent.items.map(item => item.str).join(' ');
           fullText += pageText + '\n';
         }
+        console.log("PDF EXTRACTED TEXT:", fullText);
         return fullText.trim();
       } catch (err) {
         console.warn("PDF.js text extraction error:", err);
@@ -1873,20 +1897,24 @@
       const timeoutId = setTimeout(() => controller.abort(), 9000);
 
       try {
-        const prompt = `Analyze this college circular document image/PDF and extract details into JSON:
-- title (string: notice title)
-- refId (string: reference number or circular ID e.g. CIRC-1234)
-- dept (string: issuing department or authority)
-- issueDate (string: YYYY-MM-DD)
-- eventDate (string: YYYY-MM-DD for event date, else "")
-- eventTime (string: e.g. "10:00 AM", else "")
-- deadlineDate (string: YYYY-MM-DD for registration/submission/payment deadline, else "")
-- venue (string: venue or room, else "")
-- fee (string: fee amount e.g. "₹ 200" or "Free", else "")
-- eligibility (string: eligible students, else "")
-- instructions (string: official instructions as separate sentences or bullet items)
+       const prompt = `Extract college circular information accurately from the provided document.
+
+Rules:
+- Use only information explicitly present in the document or additional context.
+- Never invent, guess, or assume dates, deadlines, fees, venues, eligibility, or names.
+- If a field is missing or unclear, return an empty string.
+- Preserve the original meaning of official instructions.
+- Return instructions as a string with each instruction on a separate line, starting with "• ".
+- Keep dates in YYYY-MM-DD format only when the date is clear.
+- Do not confuse the issue date, event date, and submission deadline.
+- Return all fields using the exact names listed below.
+
+Fields:
+title, refId, dept, issueDate, eventDate, eventTime, deadlineDate, venue, fee, eligibility, instructions.
+
 ${additionalText ? 'Additional context: ' + additionalText : ''}
-Return ONLY raw JSON object without markdown formatting.`;
+
+Return only a valid JSON object without markdown formatting.`;
 
         const mime = mimeType.includes('pdf') ? 'application/pdf' : (mimeType.includes('png') ? 'image/png' : 'image/jpeg');
 
@@ -1901,6 +1929,7 @@ Return ONLY raw JSON object without markdown formatting.`;
         };
 
         const apiKey = "";
+        if (!apiKey) return null; // Use the local PDF/OCR parser unless a secure backend is configured.
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
 
         const res = await fetch(apiUrl, {
@@ -1928,47 +1957,12 @@ Return ONLY raw JSON object without markdown formatting.`;
       return null;
     }
 
+    // Local-first extraction: this app must work without a browser-exposed Gemini API key.
+    // Text is extracted from PDFs locally by PDF.js; the deterministic parser below handles it.
     async function callGeminiExtractFromText(text) {
-      if (!text || text.length < 15) return null;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      try {
-        const prompt = `Extract structured circular info from text into JSON:
-${text}
-JSON schema: title, refId, dept, issueDate (YYYY-MM-DD), eventDate (YYYY-MM-DD or ""), eventTime, deadlineDate (YYYY-MM-DD or ""), venue, fee, eligibility, instructions (as concise sentences/bullet points).
-Return ONLY valid JSON object.`;
-
-        const payload = {
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: "application/json" }
-        };
-
-        const apiKey = "";
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-
-        const res = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-        if (!res.ok) return null;
-
-        const data = await res.json();
-        const textResp = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (textResp) {
-          const parsed = JSON.parse(textResp);
-          if (parsed.deadlineDate) parsed.deadlineDetected = true;
-          return parsed;
-        }
-      } catch (e) {
-        console.warn("Gemini text extraction fallback:", e);
-      } finally {
-        clearTimeout(timeoutId);
-      }
+      if (!text || text.trim().length < 15) return null;
+      // No API key is configured in this file. Returning null safely activates the local parser.
+      // Do not place a private Gemini API key in public client-side HTML.
       return null;
     }
 
@@ -1986,75 +1980,71 @@ Return ONLY valid JSON object.`;
     }
 
     function extractNoticeFields(text) {
+      const source = String(text || '').replace(/\r/g, '\n').replace(/[\t ]+/g, ' ');
       const fields = {
-        title: '',
-        refId: '',
-        dept: '',
-        issueDate: new Date().toISOString().split('T')[0],
-        eventDate: '',
-        eventTime: '',
-        deadlineDate: '',
-        venue: '',
-        fee: '',
-        eligibility: '',
-        instructions: text.slice(0, 400),
-        deadlineDetected: false
+        title: '', refId: '', dept: '',
+        issueDate: '', eventDate: '', eventTime: '', deadlineDate: '',
+        venue: '', fee: '', eligibility: '', instructions: '', deadlineDetected: false
       };
+      const flat = source.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+      const lines = source.split(/\n+/).map(line => line.trim()).filter(Boolean);
 
-      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-      if (lines.length > 0) {
-        fields.title = lines[0].replace(/^(notice|subject|circular|re)[:\s]*/i, '').slice(0, 90);
+      // Prefer the actual subject/event title over the college heading.
+      const subjectMatch = flat.match(/(?:subject|event|programme|program|title)\s*[:\-]\s*(.{3,140}?)(?=\s+(?:event date|event time|registration fee|registration deadline|venue|eligibility|official instructions|issued by)\b|$)/i);
+      if (subjectMatch) fields.title = subjectMatch[1].trim().replace(/[.;]+$/, '').slice(0, 120);
+      if (!fields.title) {
+        const titleLine = lines.find(line => /\b(subject|event|sprint|fest|workshop|seminar|hackathon|conference|competition)\b/i.test(line) && !/college of|department of/i.test(line));
+        fields.title = (titleLine || lines[0] || '').replace(/^(notice|subject|circular|title)[:\s-]*/i, '').slice(0, 120);
       }
 
-      const refMatch = text.match(/(?:ref|notice|circular|no|id)[:\.\s]*([A-Z0-9\-\/]{4,25})/i);
-      if (refMatch) fields.refId = refMatch[1];
+      const refMatch = flat.match(/(?:circular\s*(?:no\.?|number|id)|reference\s*(?:no\.?|number|id)|ref\s*(?:no\.?|number|id)|\bID)\s*[:#.]?\s*([A-Z0-9][A-Z0-9\/-]{3,30})/i);
+      if (refMatch) fields.refId = refMatch[1].replace(/[.,;]+$/, '');
 
-      const deptMatch = text.match(/(?:department|dept|issued by|organized by|office of)[:\s]*([A-Za-z\s]+)/i);
-      if (deptMatch) fields.dept = deptMatch[1].trim().slice(0, 40);
+      const deptMatch = flat.match(/(?:department\s+of|department|dept\.?|issued\s+by|organized\s+by|organised\s+by|office\s+of)\s*[:\-]?\s*([A-Za-z][A-Za-z &(),-]{2,65}?)(?=\s+(?:official circular|circular no|issue date|event|subject|registration|venue|eligibility|official instructions)\b|[.;]|$)/i);
+      if (deptMatch) fields.dept = deptMatch[1].trim().slice(0, 65);
 
-      const deadlinePatterns = [
-        /(?:last\s+date|deadline|register\s+by|registration\s+closes|submit\s+by|submission\s+deadline|due\s+date|payment\s+due|paid\s+before|applications\s+close)[:\s]*([A-Za-z0-9\s,\/\-]+)/i,
-        /(?:due\s+on|before|by)[:\s]*(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}|\d{1,2}[-\/]\d{1,2}[-\/]\d{4})/i
-      ];
+      const issueMatch = flat.match(/(?:issue\s+date|issued\s+on|date\s+of\s+issue)\s*[:\-]?\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4}|\d{1,2}[-\/]\d{1,2}[-\/]\d{4}|\d{4}-\d{2}-\d{2})/i);
+      if (issueMatch) fields.issueDate = parseFlexibleDate(issueMatch[1]);
 
-      for (let pattern of deadlinePatterns) {
-        const match = text.match(pattern);
-        if (match && match[1]) {
-          const parsedDate = parseFlexibleDate(match[1].trim());
-          if (parsedDate) {
-            fields.deadlineDate = parsedDate;
-            fields.deadlineDetected = true;
-            break;
-          }
-        }
+      // Capture dates from explicitly labelled fields, preventing the issue date from being mistaken for the event date.
+      const eventMatch = flat.match(/(?:event\s+date|date\s+of\s+event|event\s+will\s+be\s+held\s+on|scheduled\s+for)\s*[:\-]?\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4}|\d{1,2}[-\/]\d{1,2}[-\/]\d{4}|\d{4}-\d{2}-\d{2})/i);
+      if (eventMatch) fields.eventDate = parseFlexibleDate(eventMatch[1]);
+
+      const deadlineMatch = flat.match(/(?:registration\s+deadline|registration\s+closes|last\s+date(?:\s+for\s+registration)?|submission\s+deadline|deadline|register\s+by|submit\s+by|applications\s+close|payment\s+deadline|fee\s+due)\s*[:\-]?\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4}|\d{1,2}[-\/]\d{1,2}[-\/]\d{4}|\d{4}-\d{2}-\d{2})(?:\s*(?:at|,)?\s*(\d{1,2}[:.]\d{2}\s*(?:AM|PM)?))?/i);
+      if (deadlineMatch) {
+        fields.deadlineDate = parseFlexibleDate(deadlineMatch[1]);
+        fields.deadlineDetected = !!fields.deadlineDate;
       }
 
-      const eventPatterns = [
-        /(?:event\s+date|held\s+on|date\s+of\s+event|scheduled\s+for|fest\s+date)[:\s]*([A-Za-z0-9\s,\/\-]+)/i
-      ];
+      const timeMatch = flat.match(/(?:event\s+time|time|timings)\s*[:\-]?\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)\s*(?:to|[-–])\s*\d{1,2}(?::\d{2})?\s*PM?|\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
+      if (timeMatch) fields.eventTime = timeMatch[1].replace(/\s+/g, ' ').trim().toUpperCase();
 
-      for (let pattern of eventPatterns) {
-        const match = text.match(pattern);
-        if (match && match[1]) {
-          const parsedDate = parseFlexibleDate(match[1].trim());
-          if (parsedDate) {
-            fields.eventDate = parsedDate;
-            break;
-          }
-        }
+      const venueMatch = flat.match(/(?:venue|location|room|hall|auditorium|place)\s*[:\-]?\s*(.{2,90}?)(?=\s+(?:subject|registration|event date|event time|registration fee|registration deadline|eligibility|official instructions|team size|issued by)\b|[.;]|$)/i);
+      if (venueMatch) fields.venue = venueMatch[1].trim().replace(/[.,;]+$/, '').slice(0, 90);
+
+      // Handles currency symbols and OCR's common loss of the rupee symbol (e.g. "n 250").
+      const feeMatch = flat.match(/(?:registration\s+fee|participation\s+fee|entry\s+fee|fee\s+amount|fee|amount|cost|charge)\s*[:\-]?\s*((?:₹|Rs\.?|INR|\$|n)\s*\d[\d,]*(?:\.\d{1,2})?(?:\s+per\s+(?:participant|team|person))?|free|no\s+fee)/i);
+      if (feeMatch) {
+        let fee = feeMatch[1].trim().replace(/\s+/g, ' ');
+        if (/^n\s*\d/i.test(fee)) fee = fee.replace(/^n\s*/i, '₹ ');
+        fields.fee = fee.slice(0, 50);
       }
 
-      const timeMatch = text.match(/(?:time|at|timings)[:\s]*(\d{1,2}:\d{2}\s*(?:AM|PM)?|\d{1,2}\s*(?:AM|PM))/i);
-      if (timeMatch) fields.eventTime = timeMatch[1].toUpperCase();
+      const eligibilityMatch = flat.match(/(?:eligibility|eligible|open\s+to|for\s+students\s+of)\s*[:\-]?\s*(.{3,100}?)(?=\s+(?:team size|registration fee|registration deadline|event date|venue|official instructions|issued by)\b|[.;]|$)/i);
+      if (eligibilityMatch) fields.eligibility = eligibilityMatch[1].trim().slice(0, 100);
 
-      const venueMatch = text.match(/(?:venue|location|room|hall|auditorium|place)[:\s]*([A-Za-z0-9\s,\-]+)/i);
-      if (venueMatch) fields.venue = venueMatch[1].trim().slice(0, 40);
-
-      const feeMatch = text.match(/(?:fee|amount|cost|charge)[:\s]*([₹\$Rs\.\d\s]+|free)/i);
-      if (feeMatch) fields.fee = feeMatch[1].trim().slice(0, 20);
-
-      const eligMatch = text.match(/(?:eligibility|eligible|open to|for students of)[:\s]*([A-Za-z0-9\s,\-]+)/i);
-      if (eligMatch) fields.eligibility = eligMatch[1].trim().slice(0, 40);
+      // Extract the official instructions section only; split bullet separators even when PDF.js returns one line.
+      const instructionsMatch = flat.match(/official\s+instructions?\s*[:\-]?\s*(.+?)(?=\s+issued\s+by\s*:|\s+authorized\s+signatory|\s+this\s+is\s+a\s+fictional|$)/i);
+      if (instructionsMatch) {
+        let instructionText = instructionsMatch[1].trim();
+        instructionText = instructionText.replace(/\s*[•●▪◦]\s*/g, '\n• ')
+          .replace(/\s+(?=(?:Complete|Pay|Each team|Bring|Teams must|Late registrations|For queries|Submit|Register|Participants must)\b)/g, '\n• ');
+        const items = instructionText.split(/\n+/).map(item => item.replace(/^\s*[•*\-\d.)]+\s*/, '').trim()).filter(Boolean);
+        fields.instructions = [...new Set(items)].map(item => '• ' + item).join('\n');
+      }
+      if (!fields.instructions) {
+        fields.instructions = '• Please read the circular carefully and follow the eligibility criteria, registration process, payment requirements, and stated deadlines.';
+      }
 
       return fields;
     }
@@ -2112,7 +2102,7 @@ Return ONLY valid JSON object.`;
 
           <div>
             <label class="block font-bold mb-1">${t('upload.instructionsLabel')}</label>
-            <textarea id="revInst" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" rows="3">${fields.instructions || ''}</textarea>
+            <textarea id="revInst" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none" rows="5">${fields.instructions || ''}</textarea>
           </div>
 
           <div class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border space-y-1">
@@ -3600,7 +3590,12 @@ Return ONLY valid JSON object.`;
 
   } catch (err) {
     console.error('Supabase login error:', err);
-    showToast('Unable to log in. Check your connection and try again.', 'error');
+    const message = String(err?.message || '');
+    if (err instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(message)) {
+      showToast('Cannot reach Supabase. Check your internet connection and confirm the Supabase project is active.', 'error');
+    } else {
+      showToast(message || 'Unable to log in. Please try again.', 'error');
+    }
   }
 }
 
